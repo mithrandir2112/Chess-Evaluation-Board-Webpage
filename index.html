@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PGN Best Move Analyzer</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="workspace">
+        <aside class="panel input-panel">
+          <div class="panel-header">
+            <div>
+              <h1>PGN Analyzer</h1>
+              <p>Load a game, select a position, and draw the engine's best move.</p>
+            </div>
+            <button id="sampleBtn" class="icon-button" title="Load sample PGN" aria-label="Load sample PGN">
+              <span aria-hidden="true">↺</span>
+            </button>
+          </div>
+
+          <label class="field">
+            <span>PGN</span>
+            <textarea id="pgnInput" spellcheck="false" placeholder="Paste a PGN game here"></textarea>
+          </label>
+
+          <div class="actions">
+            <button id="parseBtn" class="primary">Analyze PGN</button>
+            <button id="clearBtn">Clear</button>
+          </div>
+
+          <div id="status" class="status" role="status">Ready for a PGN.</div>
+        </aside>
+
+        <section class="board-panel">
+          <div class="toolbar">
+            <div class="move-controls">
+              <button id="firstBtn" class="icon-button" title="Start" aria-label="Start">⏮</button>
+              <button id="prevBtn" class="icon-button" title="Previous move" aria-label="Previous move">‹</button>
+              <span id="positionLabel" class="position-label">Start position</span>
+              <button id="nextBtn" class="icon-button" title="Next move" aria-label="Next move">›</button>
+              <button id="lastBtn" class="icon-button" title="Latest move" aria-label="Latest move">⏭</button>
+            </div>
+            <button id="analyzeBtn" class="primary">Find Best Move</button>
+          </div>
+
+          <div class="stage">
+            <div class="board-area">
+              <div class="eval-bar" aria-label="Position evaluation">
+                <span class="eval-side black">Black</span>
+                <div class="eval-track">
+                  <div id="blackEvalFill" class="eval-fill black-fill"></div>
+                  <div id="whiteEvalFill" class="eval-fill white-fill"></div>
+                  <div class="eval-midline"></div>
+                </div>
+                <span class="eval-side white">White</span>
+              </div>
+              <div id="board" class="board" aria-label="Chessboard"></div>
+            </div>
+            <div class="analysis">
+              <div class="metric eval-summary">
+                <span>Position</span>
+                <strong id="positionEval">Equal</strong>
+              </div>
+              <div class="metric">
+                <span>Best move</span>
+                <strong id="bestMove">-</strong>
+              </div>
+              <div class="metric">
+                <span>Evaluation</span>
+                <strong id="evalScore">-</strong>
+              </div>
+              <div class="metric">
+                <span>Line</span>
+                <strong id="pvLine">-</strong>
+              </div>
+              <div class="metric">
+                <span>Engine</span>
+                <strong id="engineName">Prototype evaluator</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="moves-wrap">
+            <div id="moveList" class="move-list" aria-label="Move list"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
