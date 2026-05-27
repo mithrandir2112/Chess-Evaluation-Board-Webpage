@@ -1,0 +1,9 @@
+{
+  "name": "pgn-stockfish-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "start": "python3 -m http.server 5173"
+  }
+}
