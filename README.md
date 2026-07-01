@@ -1,6 +1,6 @@
-# PGN Best Move Analyzer Prototype
+# Chess Stockfish Analyzer
 
-A dependency-free browser prototype for loading a PGN game, stepping through positions, and drawing the best move on a chessboard.
+A browser-based chess analysis workspace for loading PGN games or FEN positions, stepping through move history, and analyzing the displayed position with Stockfish.
 
 ## Run
 
@@ -19,17 +19,33 @@ If your browser prefers IPv4, use `http://127.0.0.1:5173`.
 ## What Works
 
 - Paste or edit PGN text.
+- Paste a FEN position.
 - Parse the move list into board positions.
 - Step to the start, previous move, next move, or latest move.
 - Move pieces on the board with the mouse; legal moves are appended to the current line.
-- View a live evaluation bar showing whether White or Black is ahead in the selected position.
-- Run a prototype evaluator on the selected position.
-- Automatically refresh the evaluation and best-move prediction after a piece is moved.
+- Analyze the selected position with Stockfish 18 Lite at depth 12.
+- Automatically refresh Stockfish analysis after navigating history or moving a piece.
+- View the Stockfish score, search depth, best move, and principal variation.
 - Render the suggested move as an arrow on the board.
-- Show evaluation and a short principal variation.
+- Flip the board and label the players on their current sides.
+- Select board themes, piece styles, piece colors, and light or dark interface mode.
 
-## Stockfish Integration Note
+## Stockfish Engine
 
-This first pass uses a local JavaScript evaluator so it can run without downloaded dependencies or a Stockfish binary. The UI is intentionally shaped around the same output a Stockfish UCI worker would provide: best move, score, and principal variation.
+The application vendors the Stockfish.js 18.0.8 lite single-threaded WASM build under:
 
-To make it production-strength, replace `findBestMove` in `src/app.js` with a Stockfish WASM worker adapter that sends `position fen ...`, `go depth ...`, and reads `bestmove`, `score`, and `pv` lines.
+```text
+public/vendor/stockfish/
+```
+
+Stockfish runs in a Web Worker inside the visitor's browser. The server only delivers the JavaScript and WASM files. Engine source, version, build, and license metadata are recorded in `public/vendor/stockfish/manifest.json`.
+
+If the Stockfish worker cannot load or respond, the application clearly switches to the original depth-3 JavaScript evaluator as a fallback.
+
+## Deployment
+
+The current single-threaded WASM build does not require cross-origin isolation headers. Apache should serve `.wasm` files as `application/wasm`; modern Apache installations commonly include this mapping already:
+
+```apache
+AddType application/wasm .wasm
+```

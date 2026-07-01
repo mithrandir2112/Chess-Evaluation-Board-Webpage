@@ -16,6 +16,7 @@ const PIECES = {
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const FILES = "abcdefgh";
 const RANKS = "87654321";
+const STOCKFISH_DEPTH = 12;
 const PIECE_STYLES = ["classic", "modern", "minimal"];
 const PIECE_PALETTES = ["black-white", "ivory-charcoal", "high-contrast", "michigan-pieces"];
 const SAMPLE_PGN = `[Event "Sample"]
@@ -33,6 +34,9 @@ const state = {
   history: [],
   activePly: 0,
   bestMove: null,
+  engineScore: null,
+  engineDepth: 0,
+  engineName: "Stockfish 18 Lite",
   analyzing: false,
   analysisId: 0,
   pointerDrag: null,
@@ -72,6 +76,7 @@ const els = {
   evalScore: document.querySelector("#evalScore"),
   pvLine: document.querySelector("#pvLine"),
   engineName: document.querySelector("#engineName"),
+  engineDepth: document.querySelector("#engineDepth"),
   themeToggle: document.querySelector("#themeToggle"),
   themeLabel: document.querySelector("#themeLabel"),
   flipBoardBtn: document.querySelector("#flipBoardBtn"),
@@ -88,6 +93,10 @@ const els = {
   bottomPlayerName: document.querySelector("#bottomPlayerName"),
   bottomPlayerColor: document.querySelector("#bottomPlayerColor")
 };
+
+const stockfishEngine = new window.StockfishEngine({
+  workerUrl: new URL("./public/vendor/stockfish/stockfish-18-lite-single.js", document.baseURI).href
+});
 
 applyPreferences();
 
@@ -175,7 +184,7 @@ function loadPgn(pgn) {
     state.game = game;
     state.history = history;
     state.activePly = history.length - 1;
-    state.bestMove = null;
+    clearAnalysisResult();
     state.players = {
       white: playerName(headers.White, "Player 1", "White"),
       black: playerName(headers.Black, "Player 2", "Black")
@@ -192,7 +201,7 @@ function loadFen(fen) {
   state.game = cloneGame(game);
   state.history = [{ game: cloneGame(game), san: "Position", move: null }];
   state.activePly = 0;
-  state.bestMove = null;
+  clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "fen";
   const loadedMessage = `FEN position loaded. ${game.turn === "w" ? "White" : "Black"} to move.`;
@@ -260,19 +269,29 @@ function tokenizePgn(pgn) {
 
 function setActivePly(ply) {
   state.activePly = ply;
-  state.bestMove = null;
+  clearAnalysisResult();
   render();
+  analyzeCurrentPosition({ automatic: true });
 }
 
 function clearApp() {
+  state.analysisId += 1;
+  state.analyzing = false;
+  stockfishEngine.cancel().catch(() => {});
   els.pgnInput.value = "";
   state.history = [{ game: createGame(), san: "Start", move: null }];
   state.activePly = 0;
-  state.bestMove = null;
+  clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "pgn";
   setStatus("Ready for PGN or FEN notation.");
   render();
+}
+
+function clearAnalysisResult() {
+  state.bestMove = null;
+  state.engineScore = null;
+  state.engineDepth = 0;
 }
 
 function render() {
@@ -491,19 +510,21 @@ function playMove(from, to) {
     { game: cloneGame(game), san, move }
   ];
   state.activePly = state.history.length - 1;
-  state.bestMove = null;
+  clearAnalysisResult();
   setStatus(`Played ${san}. Updating best move...`);
   render();
   analyzeCurrentPosition({ automatic: true });
 }
 
 function renderEvaluationBar(game) {
-  const score = evaluate(game);
+  const score = state.engineScore ? engineScoreToNumber(state.engineScore) : 0;
   const whitePercent = scoreToWhitePercent(score);
   const blackPercent = 100 - whitePercent;
   els.whiteEvalFill.style.height = `${whitePercent}%`;
   els.blackEvalFill.style.height = `${blackPercent}%`;
-  els.positionEval.textContent = formatEval(score);
+  els.positionEval.textContent = state.engineScore
+    ? formatEngineScore(state.engineScore)
+    : state.analyzing ? "Analyzing..." : "Not analyzed";
   els.positionEval.style.color = score > 25 ? "var(--accent-strong)" : score < -25 ? "var(--ink)" : "var(--muted)";
   const isFlipped = state.orientation === "black";
   els.evalBar.classList.toggle("flipped", isFlipped);
@@ -512,8 +533,11 @@ function renderEvaluationBar(game) {
 }
 
 function renderAnalysis(game) {
-  const currentScore = evaluate(game);
-  els.evalScore.textContent = formatEval(currentScore);
+  els.evalScore.textContent = state.engineScore
+    ? formatEngineScore(state.engineScore)
+    : state.analyzing ? "Analyzing..." : "-";
+  els.engineName.textContent = state.engineName;
+  els.engineDepth.textContent = state.engineDepth ? String(state.engineDepth) : "-";
 
   if (state.bestMove) {
     els.bestMove.textContent = `${state.bestMove.san || state.bestMove.uci}`;
@@ -541,19 +565,129 @@ async function analyzeCurrentPosition(options = {}) {
   const game = cloneGame(state.history[state.activePly].game);
   const analysisId = ++state.analysisId;
   state.analyzing = true;
-  state.bestMove = null;
+  clearAnalysisResult();
+  state.engineName = "Stockfish 18 Lite";
   if (!options.automatic) setStatus("Analyzing selected position...");
   render();
 
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  const best = findBestMove(game, 3);
-  if (analysisId !== state.analysisId) return;
-  state.bestMove = best;
-  state.analyzing = false;
-  els.engineName.textContent = "Prototype evaluator";
-  const resultMessage = best ? `Best move found: ${best.san || best.uci}.` : "No legal moves in this position.";
-  setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage);
-  render();
+  try {
+    const result = await stockfishEngine.analyze(gameToFen(game), {
+      depth: STOCKFISH_DEPTH,
+      onInfo: (info) => {
+        if (analysisId !== state.analysisId) return;
+        if (info.score) state.engineScore = info.score;
+        if (info.depth) state.engineDepth = info.depth;
+        renderEvaluationBar(game);
+        renderAnalysis(game);
+      }
+    });
+
+    if (analysisId !== state.analysisId) return;
+    state.bestMove = stockfishResultToMove(game, result);
+    state.engineScore = result.score || state.engineScore;
+    state.engineDepth = result.depth || state.engineDepth;
+    state.engineName = result.engineName || "Stockfish 18 Lite";
+    state.analyzing = false;
+    const resultMessage = state.bestMove
+      ? `Stockfish depth ${state.engineDepth}: best move ${state.bestMove.san || state.bestMove.uci}.`
+      : "No legal moves in this position.";
+    setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage);
+    render();
+  } catch (error) {
+    if (error.name === "AbortError" || analysisId !== state.analysisId) return;
+
+    const best = findBestMove(game, 3);
+    state.bestMove = best;
+    state.engineScore = best ? { type: "cp", value: best.score } : null;
+    state.engineDepth = 3;
+    state.engineName = "Prototype fallback";
+    state.analyzing = false;
+    const resultMessage = best
+      ? `Stockfish unavailable; prototype fallback suggests ${best.san || best.uci}.`
+      : "Stockfish unavailable and no legal moves were found.";
+    setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage, true);
+    render();
+  }
+}
+
+function gameToFen(game) {
+  const placement = game.board.map((rank) => {
+    let empty = 0;
+    let output = "";
+    for (const piece of rank) {
+      if (!piece) {
+        empty += 1;
+        continue;
+      }
+      if (empty) output += empty;
+      empty = 0;
+      output += piece;
+    }
+    return output + (empty || "");
+  }).join("/");
+
+  return [
+    placement,
+    game.turn,
+    game.castling || "-",
+    game.ep || "-",
+    game.halfmove,
+    game.fullmove
+  ].join(" ");
+}
+
+function stockfishResultToMove(game, result) {
+  if (!result.bestMove) return null;
+  const move = moveFromUci(game, result.bestMove);
+  if (!move) throw new Error(`Stockfish returned an unsupported move: ${result.bestMove}`);
+
+  return {
+    ...move,
+    san: moveToSan(game, move),
+    uci: result.bestMove,
+    score: result.score,
+    pv: uciLineToSan(game, result.pv?.length ? result.pv : [result.bestMove])
+  };
+}
+
+function moveFromUci(game, uci) {
+  const normalized = uci.toLowerCase();
+  const from = normalized.slice(0, 2);
+  const to = normalized.slice(2, 4);
+  const promotion = normalized[4] || null;
+  return legalMoves(game).find((move) => (
+    move.from === from
+    && move.to === to
+    && (move.promotion || null) === promotion
+  ));
+}
+
+function uciLineToSan(game, line) {
+  const current = cloneGame(game);
+  const san = [];
+
+  for (const uci of line || []) {
+    const move = moveFromUci(current, uci);
+    if (!move) break;
+    san.push(moveToSan(current, move));
+    applyMove(current, move);
+  }
+
+  return san;
+}
+
+function engineScoreToNumber(score) {
+  if (score.type === "mate") return score.value > 0 ? 100000 : score.value < 0 ? -100000 : 0;
+  return score.value;
+}
+
+function formatEngineScore(score) {
+  if (score.type === "mate") {
+    if (score.value > 0) return `White mates in ${score.value}`;
+    if (score.value < 0) return `Black mates in ${Math.abs(score.value)}`;
+    return "Checkmate";
+  }
+  return formatEval(score.value);
 }
 
 function setStatus(message, isError = false) {

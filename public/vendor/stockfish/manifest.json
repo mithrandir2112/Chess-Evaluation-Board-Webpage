@@ -1,0 +1,14 @@
+{
+  "package": "stockfish",
+  "packageVersion": "18.0.8",
+  "engineVersion": "18",
+  "build": "lite-single",
+  "repository": "https://github.com/nmrugg/stockfish.js",
+  "sourceCommit": "93c994592dcf3b4b21052ab925e9b534df9c0918",
+  "packageArchive": "https://registry.npmjs.org/stockfish/-/stockfish-18.0.8.tgz",
+  "license": "GPL-3.0",
+  "files": {
+    "worker": "stockfish-18-lite-single.js",
+    "wasm": "stockfish-18-lite-single.wasm"
+  }
+}
