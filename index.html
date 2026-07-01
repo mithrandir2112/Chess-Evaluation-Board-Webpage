@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/styles.css?v=10" />
   </head>
   <body>
     <main class="app">
@@ -46,9 +46,12 @@
 
         <section class="board-panel">
           <div class="appearance-bar" aria-label="Appearance settings">
-            <div class="appearance-title">
-              <span class="eyebrow">Board studio</span>
-              <strong>Position explorer</strong>
+            <div class="move-controls">
+              <button id="firstBtn" class="icon-button" title="Start" aria-label="Start">⏮</button>
+              <button id="prevBtn" class="icon-button" title="Previous move" aria-label="Previous move">‹</button>
+              <span id="positionLabel" class="position-label">Start position</span>
+              <button id="nextBtn" class="icon-button" title="Next move" aria-label="Next move">›</button>
+              <button id="lastBtn" class="icon-button" title="Latest move" aria-label="Latest move">⏭</button>
             </div>
             <div class="appearance-controls">
               <label class="select-control">
@@ -87,16 +90,6 @@
               </button>
             </div>
           </div>
-          <div class="toolbar">
-            <div class="move-controls">
-              <button id="firstBtn" class="icon-button" title="Start" aria-label="Start">⏮</button>
-              <button id="prevBtn" class="icon-button" title="Previous move" aria-label="Previous move">‹</button>
-              <span id="positionLabel" class="position-label">Start position</span>
-              <button id="nextBtn" class="icon-button" title="Next move" aria-label="Next move">›</button>
-              <button id="lastBtn" class="icon-button" title="Latest move" aria-label="Latest move">⏭</button>
-            </div>
-            <button id="analyzeBtn" class="primary">Find Best Move</button>
-          </div>
 
           <div class="stage">
             <div class="board-area">
@@ -123,42 +116,84 @@
                 </div>
               </div>
             </div>
-            <div class="analysis">
-              <div class="metric eval-summary">
-                <span>Position</span>
-                <strong id="positionEval">Equal</strong>
-              </div>
-              <div class="metric">
-                <span>Best move</span>
-                <strong id="bestMove">-</strong>
-              </div>
-              <div class="metric">
-                <span>Evaluation</span>
-                <strong id="evalScore">-</strong>
-              </div>
-              <div class="metric">
-                <span>Line</span>
-                <strong id="pvLine">-</strong>
-              </div>
-              <div class="metric">
-                <span>Engine</span>
-                <strong id="engineName">Stockfish 18 Lite</strong>
-              </div>
-              <div class="metric">
-                <span>Depth</span>
-                <strong id="engineDepth">-</strong>
-              </div>
+          </div>
+        </section>
+
+        <aside class="panel analysis-panel">
+          <div class="analysis-heading">
+            <span class="eyebrow">Current position</span>
+            <strong>Analysis</strong>
+          </div>
+
+          <div class="analysis">
+            <div class="metric eval-summary">
+              <span>Position</span>
+              <strong id="positionEval">Equal</strong>
+            </div>
+            <div class="metric">
+              <span>Best move</span>
+              <strong id="bestMove">-</strong>
+            </div>
+            <div class="metric">
+              <span>Engine</span>
+              <strong id="engineName">Stockfish 18 Lite</strong>
+            </div>
+            <div class="metric">
+              <span>Depth</span>
+              <strong id="engineDepth">-</strong>
             </div>
           </div>
 
+          <div class="pv-strip">
+            <span>Line</span>
+            <strong id="pvLine" title="No principal variation">-</strong>
+          </div>
+
+          <section class="candidate-panel" aria-labelledby="candidateTitle">
+            <div class="candidate-header">
+              <div>
+                <span class="eyebrow">Engine analysis</span>
+                <h2 id="candidateTitle">Stockfish Candidates</h2>
+              </div>
+              <div class="engine-controls">
+                <label class="select-control">
+                  <span>Depth</span>
+                  <select id="depthSelect" aria-label="Analysis depth">
+                    <option value="10">Quick · 10</option>
+                    <option value="14">Standard · 14</option>
+                    <option value="18">Deep · 18</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label id="customDepthControl" class="select-control custom-depth-control" hidden>
+                  <span>Custom</span>
+                  <input id="customDepthInput" type="number" min="6" max="30" value="22" aria-label="Custom analysis depth" />
+                </label>
+                <button id="analyzeBtn" class="primary">Analyze</button>
+                <button id="stopBtn" class="icon-button stop-button" title="Stop analysis" aria-label="Stop analysis" hidden>
+                  <span aria-hidden="true">■</span>
+                </button>
+              </div>
+            </div>
+            <div class="analysis-progress">
+              <span id="analysisProgress">Ready</span>
+              <span id="depthWarning" class="depth-warning" hidden>High depths may take several minutes.</span>
+            </div>
+            <div id="candidateList" class="candidate-list" aria-live="polite"></div>
+          </section>
+
           <div class="moves-wrap">
+            <div class="moves-header">
+              <h2>Game Moves</h2>
+              <span id="moveCount">Move 0 of 0</span>
+            </div>
             <div id="moveList" class="move-list" aria-label="Move list"></div>
           </div>
-        </section>
+        </aside>
       </section>
     </main>
 
     <script defer src="./src/stockfish-engine.js"></script>
-    <script defer src="./src/app.js"></script>
+    <script defer src="./src/app.js?v=3"></script>
   </body>
 </html>

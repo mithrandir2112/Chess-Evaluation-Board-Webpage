@@ -55,6 +55,7 @@
       if (requestId !== this.requestId) throw new DOMException("Analysis superseded.", "AbortError");
 
       const depth = options.depth || 12;
+      const multiPv = Math.max(1, Math.min(5, options.multiPv || 1));
       const turn = fen.split(/\s+/)[1];
 
       return new Promise((resolve, reject) => {
@@ -67,6 +68,7 @@
         this.pendingSearch = {
           turn,
           latest: null,
+          variations: new Map(),
           onInfo: options.onInfo,
           resolve: (result) => {
             clearTimeout(timeout);
@@ -78,6 +80,7 @@
           }
         };
 
+        this.send(`setoption name MultiPV value ${multiPv}`);
         this.send(`position fen ${fen}`);
         this.send(`go depth ${depth}`);
       });
@@ -140,13 +143,19 @@
       if (line.startsWith("info ")) {
         const info = parseInfoLine(line, this.pendingSearch.turn);
         if (!info) return;
-        const previous = this.pendingSearch.latest || {};
-        this.pendingSearch.latest = {
+        const previous = this.pendingSearch.variations.get(info.multiPv) || {};
+        const variation = {
+          multiPv: info.multiPv,
           depth: info.depth || previous.depth || 0,
           score: info.score || previous.score || null,
           pv: info.pv.length ? info.pv : previous.pv || []
         };
-        this.pendingSearch.onInfo?.(this.pendingSearch.latest);
+        this.pendingSearch.variations.set(info.multiPv, variation);
+        this.pendingSearch.latest = this.pendingSearch.variations.get(1) || variation;
+        this.pendingSearch.onInfo?.({
+          ...this.pendingSearch.latest,
+          variations: [...this.pendingSearch.variations.values()].sort((a, b) => a.multiPv - b.multiPv)
+        });
         return;
       }
 
@@ -157,6 +166,7 @@
         pending.resolve({
           bestMove: bestMove === "(none)" ? null : bestMove,
           ...pending.latest,
+          variations: [...pending.variations.values()].sort((a, b) => a.multiPv - b.multiPv),
           engineName: this.engineName
         });
       }
@@ -166,6 +176,7 @@
   function parseInfoLine(line, turn) {
     const depthMatch = line.match(/\bdepth\s+(\d+)/);
     const scoreMatch = line.match(/\bscore\s+(cp|mate)\s+(-?\d+)/);
+    const multiPvMatch = line.match(/\bmultipv\s+(\d+)/);
     const pvMatch = line.match(/\bpv\s+(.+)$/);
     if (!depthMatch && !scoreMatch && !pvMatch) return null;
 
@@ -179,6 +190,7 @@
     }
 
     return {
+      multiPv: multiPvMatch ? Number(multiPvMatch[1]) : 1,
       depth: depthMatch ? Number(depthMatch[1]) : 0,
       score,
       pv: pvMatch ? pvMatch[1].trim().split(/\s+/) : []

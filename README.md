@@ -23,8 +23,11 @@ If your browser prefers IPv4, use `http://127.0.0.1:5173`.
 - Parse the move list into board positions.
 - Step to the start, previous move, next move, or latest move.
 - Move pieces on the board with the mouse; legal moves are appended to the current line.
-- Analyze the selected position with Stockfish 18 Lite at depth 12.
+- Analyze the selected position with Stockfish 18 Lite at preset or custom depth (6–30).
 - Automatically refresh Stockfish analysis after navigating history or moving a piece.
+- Compare three Stockfish candidate moves with evaluations and principal variations.
+- Play a candidate move directly on the board, then return through move history to compare another line.
+- Stop a long-running search while retaining the latest completed depth.
 - View the Stockfish score, search depth, best move, and principal variation.
 - Render the suggested move as an arrow on the board.
 - Flip the board and label the players on their current sides.
@@ -49,3 +52,7 @@ The current single-threaded WASM build does not require cross-origin isolation h
 ```apache
 AddType application/wasm .wasm
 ```
+
+## Follow-up Notes
+
+- Increase the visual size of the Depth label and selector; the current control is smaller than the surrounding analysis controls.

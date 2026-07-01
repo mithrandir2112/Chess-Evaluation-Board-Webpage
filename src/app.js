@@ -16,7 +16,7 @@ const PIECES = {
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const FILES = "abcdefgh";
 const RANKS = "87654321";
-const STOCKFISH_DEPTH = 12;
+const DEFAULT_STOCKFISH_DEPTH = 14;
 const PIECE_STYLES = ["classic", "modern", "minimal"];
 const PIECE_PALETTES = ["black-white", "ivory-charcoal", "high-contrast", "michigan-pieces"];
 const SAMPLE_PGN = `[Event "Sample"]
@@ -37,6 +37,8 @@ const state = {
   engineScore: null,
   engineDepth: 0,
   engineName: "Stockfish 18 Lite",
+  candidates: [],
+  analysisDepth: clampDepth(Number(readPreference("chess-analysis-depth", DEFAULT_STOCKFISH_DEPTH))),
   analyzing: false,
   analysisId: 0,
   pointerDrag: null,
@@ -61,6 +63,9 @@ const els = {
   clearBtn: document.querySelector("#clearBtn"),
   sampleBtn: document.querySelector("#sampleBtn"),
   status: document.querySelector("#status"),
+  stage: document.querySelector(".stage"),
+  boardArea: document.querySelector(".board-area"),
+  boardStack: document.querySelector(".board-stack"),
   board: document.querySelector("#board"),
   moveList: document.querySelector("#moveList"),
   firstBtn: document.querySelector("#firstBtn"),
@@ -73,10 +78,17 @@ const els = {
   whiteEvalFill: document.querySelector("#whiteEvalFill"),
   positionEval: document.querySelector("#positionEval"),
   bestMove: document.querySelector("#bestMove"),
-  evalScore: document.querySelector("#evalScore"),
   pvLine: document.querySelector("#pvLine"),
   engineName: document.querySelector("#engineName"),
   engineDepth: document.querySelector("#engineDepth"),
+  depthSelect: document.querySelector("#depthSelect"),
+  customDepthControl: document.querySelector("#customDepthControl"),
+  customDepthInput: document.querySelector("#customDepthInput"),
+  stopBtn: document.querySelector("#stopBtn"),
+  analysisProgress: document.querySelector("#analysisProgress"),
+  depthWarning: document.querySelector("#depthWarning"),
+  candidateList: document.querySelector("#candidateList"),
+  moveCount: document.querySelector("#moveCount"),
   themeToggle: document.querySelector("#themeToggle"),
   themeLabel: document.querySelector("#themeLabel"),
   flipBoardBtn: document.querySelector("#flipBoardBtn"),
@@ -99,6 +111,7 @@ const stockfishEngine = new window.StockfishEngine({
 });
 
 applyPreferences();
+updateDepthControls();
 
 els.pgnInput.value = SAMPLE_PGN;
 els.parseBtn.addEventListener("click", parseNotationFromInput);
@@ -112,13 +125,65 @@ els.prevBtn.addEventListener("click", () => setActivePly(Math.max(0, state.activ
 els.nextBtn.addEventListener("click", () => setActivePly(Math.min(state.history.length - 1, state.activePly + 1)));
 els.lastBtn.addEventListener("click", () => setActivePly(state.history.length - 1));
 els.analyzeBtn.addEventListener("click", analyzeCurrentPosition);
+els.stopBtn.addEventListener("click", stopAnalysis);
+els.depthSelect.addEventListener("change", handleDepthSelection);
+els.customDepthInput.addEventListener("input", handleCustomDepthInput);
+els.customDepthInput.addEventListener("change", handleCustomDepthChange);
 els.themeToggle.addEventListener("click", toggleTheme);
 els.flipBoardBtn.addEventListener("click", flipBoard);
 els.boardThemeSelect.addEventListener("change", (event) => setBoardTheme(event.target.value));
 els.pieceStyleSelect.addEventListener("change", (event) => setPieceStyle(event.target.value));
 els.piecePaletteSelect.addEventListener("change", (event) => setPiecePalette(event.target.value));
 
+setupResponsiveBoard();
 parseNotationFromInput();
+
+function setupResponsiveBoard() {
+  const desktopLayout = window.matchMedia("(min-width: 1101px)");
+  let lastSize = null;
+  let resizeFrame = null;
+
+  const resizeBoard = () => {
+    resizeFrame = null;
+    if (!desktopLayout.matches) {
+      lastSize = null;
+      els.boardArea.style.removeProperty("--board-size");
+      return;
+    }
+
+    const stage = els.stage.getBoundingClientRect();
+    const areaStyle = getComputedStyle(els.boardArea);
+    const stackStyle = getComputedStyle(els.boardStack);
+    const columnGap = parseFloat(areaStyle.columnGap) || 0;
+    const rowGap = parseFloat(stackStyle.rowGap) || 0;
+    const evaluationWidth = els.evalBar.getBoundingClientRect().width;
+    const playerHeight = els.topPlayer.getBoundingClientRect().height + els.bottomPlayer.getBoundingClientRect().height;
+    const verticalChrome = playerHeight + rowGap * 2 + 8;
+    const horizontalChrome = evaluationWidth + columnGap;
+    const nextSize = Math.max(0, Math.floor(Math.min(
+      stage.width - horizontalChrome,
+      stage.height - verticalChrome
+    )));
+
+    if (lastSize !== null && Math.abs(nextSize - lastSize) < 3) return;
+    lastSize = nextSize;
+    els.boardArea.style.setProperty("--board-size", `${nextSize}px`);
+  };
+
+  const scheduleResize = () => {
+    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(resizeBoard);
+  };
+
+  if ("ResizeObserver" in window) {
+    const observer = new ResizeObserver(scheduleResize);
+    observer.observe(els.stage);
+  }
+  desktopLayout.addEventListener?.("change", scheduleResize);
+  window.addEventListener("resize", scheduleResize, { passive: true });
+  window.visualViewport?.addEventListener("resize", scheduleResize, { passive: true });
+  scheduleResize();
+}
 
 function createGame() {
   return gameFromFen(START_FEN);
@@ -292,6 +357,7 @@ function clearAnalysisResult() {
   state.bestMove = null;
   state.engineScore = null;
   state.engineDepth = 0;
+  state.candidates = [];
 }
 
 function render() {
@@ -301,6 +367,7 @@ function render() {
   renderPlayerLabels(current);
   renderMoveList();
   renderAnalysis(current);
+  renderCandidates();
   updateControls();
 }
 
@@ -379,13 +446,13 @@ function createArrowLayer(move) {
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
   const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
   marker.setAttribute("id", "arrowhead");
-  marker.setAttribute("markerWidth", "2.75");
-  marker.setAttribute("markerHeight", "2.75");
-  marker.setAttribute("refX", "2.25");
-  marker.setAttribute("refY", "1.125");
+  marker.setAttribute("markerWidth", "2.1");
+  marker.setAttribute("markerHeight", "2.1");
+  marker.setAttribute("refX", "1.8");
+  marker.setAttribute("refY", "0.9");
   marker.setAttribute("orient", "auto");
   const head = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  head.setAttribute("d", "M0,0 L0,2.25 L2.625,1.125 z");
+  head.setAttribute("d", "M0,0 L0,1.8 L2.05,0.9 z");
   head.setAttribute("fill", "var(--arrow)");
   marker.append(head);
   defs.append(marker);
@@ -396,7 +463,7 @@ function createArrowLayer(move) {
   line.setAttribute("x2", shortened.x2);
   line.setAttribute("y2", shortened.y2);
   line.setAttribute("stroke", "var(--arrow)");
-  line.setAttribute("stroke-width", "2.45");
+  line.setAttribute("stroke-width", "1.2");
   line.setAttribute("stroke-linecap", "round");
   line.setAttribute("marker-end", "url(#arrowhead)");
   line.setAttribute("opacity", "0.84");
@@ -408,6 +475,7 @@ function createArrowLayer(move) {
 function renderMoveList() {
   els.moveList.innerHTML = "";
   const moves = state.history.slice(1);
+  els.moveCount.textContent = `Move ${state.activePly} of ${moves.length}`;
 
   for (let i = 0; i < moves.length; i += 2) {
     const pair = document.createElement("div");
@@ -491,11 +559,11 @@ function moveDragGhost(event) {
   ghost.style.top = `${event.clientY}px`;
 }
 
-function playMove(from, to) {
+function playMove(from, to, promotion = "q") {
   const game = cloneGame(state.history[state.activePly].game);
   const move = legalMoves(game).find((candidate) => {
     if (candidate.from !== from || candidate.to !== to) return false;
-    return !candidate.promotion || candidate.promotion === "q";
+    return !candidate.promotion || candidate.promotion === promotion;
   });
 
   if (!move) {
@@ -533,18 +601,44 @@ function renderEvaluationBar(game) {
 }
 
 function renderAnalysis(game) {
-  els.evalScore.textContent = state.engineScore
-    ? formatEngineScore(state.engineScore)
-    : state.analyzing ? "Analyzing..." : "-";
   els.engineName.textContent = state.engineName;
   els.engineDepth.textContent = state.engineDepth ? String(state.engineDepth) : "-";
 
   if (state.bestMove) {
     els.bestMove.textContent = `${state.bestMove.san || state.bestMove.uci}`;
-    els.pvLine.textContent = state.bestMove.pv?.join(" ") || state.bestMove.uci;
+    const line = state.bestMove.pv?.join(" ") || state.bestMove.uci;
+    els.pvLine.textContent = line;
+    els.pvLine.title = line;
   } else {
     els.bestMove.textContent = "-";
     els.pvLine.textContent = "-";
+    els.pvLine.title = "No principal variation";
+  }
+}
+
+function renderCandidates() {
+  els.candidateList.innerHTML = "";
+
+  if (!state.candidates.length) {
+    const empty = document.createElement("div");
+    empty.className = "candidate-empty";
+    empty.textContent = state.analyzing ? "Calculating candidate lines..." : "Analyze this position to compare candidate moves.";
+    els.candidateList.append(empty);
+    return;
+  }
+
+  for (const [index, candidate] of state.candidates.entries()) {
+    const row = document.createElement("button");
+    row.className = "candidate-row";
+    row.type = "button";
+    row.title = `Play ${candidate.san}. ${candidate.pv.join(" ")}`;
+    row.setAttribute("aria-label", `Play candidate ${index + 1}: ${candidate.san}`);
+    row.innerHTML = `<span class="candidate-rank">${index + 1}</span><strong class="candidate-move"></strong><span class="candidate-score"></span><span class="candidate-pv"></span><span class="candidate-play" aria-hidden="true">▶</span>`;
+    row.querySelector(".candidate-move").textContent = candidate.san;
+    row.querySelector(".candidate-score").textContent = formatEngineScore(candidate.score);
+    row.querySelector(".candidate-pv").textContent = candidate.pv.join(" ");
+    row.addEventListener("click", () => playCandidate(candidate));
+    els.candidateList.append(row);
   }
 }
 
@@ -556,6 +650,10 @@ function updateControls() {
   els.lastBtn.disabled = !hasHistory || state.activePly >= state.history.length - 1;
   els.analyzeBtn.disabled = state.analyzing;
   els.parseBtn.disabled = state.analyzing;
+  els.stopBtn.hidden = !state.analyzing;
+  els.analysisProgress.textContent = state.analyzing
+    ? `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
+    : state.engineDepth ? `Completed at depth ${state.engineDepth}` : "Ready";
   els.positionLabel.textContent = state.activePly === 0
     ? state.inputFormat === "fen" ? "FEN position" : "Start position"
     : `After ${state.history[state.activePly].san}`;
@@ -572,13 +670,18 @@ async function analyzeCurrentPosition(options = {}) {
 
   try {
     const result = await stockfishEngine.analyze(gameToFen(game), {
-      depth: STOCKFISH_DEPTH,
+      depth: state.analysisDepth,
+      multiPv: 3,
+      timeoutMs: 300000,
       onInfo: (info) => {
         if (analysisId !== state.analysisId) return;
         if (info.score) state.engineScore = info.score;
         if (info.depth) state.engineDepth = info.depth;
+        state.candidates = stockfishVariationsToMoves(game, info.variations);
         renderEvaluationBar(game);
         renderAnalysis(game);
+        renderCandidates();
+        updateControls();
       }
     });
 
@@ -587,6 +690,7 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineScore = result.score || state.engineScore;
     state.engineDepth = result.depth || state.engineDepth;
     state.engineName = result.engineName || "Stockfish 18 Lite";
+    state.candidates = stockfishVariationsToMoves(game, result.variations);
     state.analyzing = false;
     const resultMessage = state.bestMove
       ? `Stockfish depth ${state.engineDepth}: best move ${state.bestMove.san || state.bestMove.uci}.`
@@ -608,6 +712,73 @@ async function analyzeCurrentPosition(options = {}) {
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage, true);
     render();
   }
+}
+
+function stockfishVariationsToMoves(game, variations = []) {
+  return variations.slice(0, 3).map((variation) => {
+    const uci = variation.pv?.[0];
+    const move = uci ? moveFromUci(game, uci) : null;
+    if (!move || !variation.score) return null;
+    return {
+      uci,
+      san: moveToSan(game, move),
+      score: variation.score,
+      pv: uciLineToSan(game, variation.pv)
+    };
+  }).filter(Boolean);
+}
+
+function playCandidate(candidate) {
+  const move = moveFromUci(state.history[state.activePly].game, candidate.uci);
+  if (!move) return;
+  playMove(move.from, move.to, move.promotion);
+}
+
+function stopAnalysis() {
+  if (!state.analyzing) return;
+  state.analysisId += 1;
+  state.analyzing = false;
+  stockfishEngine.cancel().catch(() => {});
+  setStatus(`Analysis stopped at depth ${state.engineDepth || 0}.`);
+  render();
+}
+
+function handleDepthSelection(event) {
+  const isCustom = event.target.value === "custom";
+  els.customDepthControl.hidden = !isCustom;
+  state.analysisDepth = isCustom ? clampDepth(Number(els.customDepthInput.value)) : Number(event.target.value);
+  savePreference("chess-analysis-depth", state.analysisDepth);
+  updateDepthWarning();
+  analyzeCurrentPosition({ automatic: true });
+}
+
+function handleCustomDepthChange() {
+  state.analysisDepth = clampDepth(Number(els.customDepthInput.value));
+  els.customDepthInput.value = state.analysisDepth;
+  savePreference("chess-analysis-depth", state.analysisDepth);
+  updateDepthWarning();
+  analyzeCurrentPosition({ automatic: true });
+}
+
+function handleCustomDepthInput() {
+  state.analysisDepth = clampDepth(Number(els.customDepthInput.value));
+  updateDepthWarning();
+}
+
+function clampDepth(depth) {
+  return Math.min(30, Math.max(6, Number.isFinite(depth) ? depth : DEFAULT_STOCKFISH_DEPTH));
+}
+
+function updateDepthControls() {
+  const preset = [10, 14, 18].includes(state.analysisDepth) ? String(state.analysisDepth) : "custom";
+  els.depthSelect.value = preset;
+  els.customDepthControl.hidden = preset !== "custom";
+  els.customDepthInput.value = state.analysisDepth;
+  updateDepthWarning();
+}
+
+function updateDepthWarning() {
+  els.depthWarning.hidden = state.analysisDepth <= 22;
 }
 
 function gameToFen(game) {
