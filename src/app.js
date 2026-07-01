@@ -16,6 +16,8 @@ const PIECES = {
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const FILES = "abcdefgh";
 const RANKS = "87654321";
+const PIECE_STYLES = ["classic", "modern", "minimal"];
+const PIECE_PALETTES = ["black-white", "ivory-charcoal", "high-contrast", "michigan-pieces"];
 const SAMPLE_PGN = `[Event "Sample"]
 [Site "Local"]
 [Date "2026.05.26"]
@@ -33,8 +35,21 @@ const state = {
   bestMove: null,
   analyzing: false,
   analysisId: 0,
-  pointerDrag: null
+  pointerDrag: null,
+  players: { white: "Player 1", black: "Player 2" },
+  inputFormat: "pgn",
+  orientation: readPreference("chess-board-orientation", "white"),
+  boardTheme: readPreference("chess-board-theme", "ice-blue"),
+  pieceStyle: readPreference("chess-piece-style", "classic"),
+  piecePalette: readPreference("chess-piece-palette", null)
 };
+
+if (state.pieceStyle === "contrast") {
+  state.pieceStyle = "classic";
+  state.piecePalette ||= "high-contrast";
+}
+if (!PIECE_STYLES.includes(state.pieceStyle)) state.pieceStyle = "classic";
+if (!PIECE_PALETTES.includes(state.piecePalette)) state.piecePalette = "black-white";
 
 const els = {
   pgnInput: document.querySelector("#pgnInput"),
@@ -56,30 +71,53 @@ const els = {
   bestMove: document.querySelector("#bestMove"),
   evalScore: document.querySelector("#evalScore"),
   pvLine: document.querySelector("#pvLine"),
-  engineName: document.querySelector("#engineName")
+  engineName: document.querySelector("#engineName"),
+  themeToggle: document.querySelector("#themeToggle"),
+  themeLabel: document.querySelector("#themeLabel"),
+  flipBoardBtn: document.querySelector("#flipBoardBtn"),
+  boardThemeSelect: document.querySelector("#boardThemeSelect"),
+  pieceStyleSelect: document.querySelector("#pieceStyleSelect"),
+  piecePaletteSelect: document.querySelector("#piecePaletteSelect"),
+  evalBar: document.querySelector("#evalBar"),
+  evalTopLabel: document.querySelector("#evalTopLabel"),
+  evalBottomLabel: document.querySelector("#evalBottomLabel"),
+  topPlayer: document.querySelector("#topPlayer"),
+  topPlayerName: document.querySelector("#topPlayerName"),
+  topPlayerColor: document.querySelector("#topPlayerColor"),
+  bottomPlayer: document.querySelector("#bottomPlayer"),
+  bottomPlayerName: document.querySelector("#bottomPlayerName"),
+  bottomPlayerColor: document.querySelector("#bottomPlayerColor")
 };
 
+applyPreferences();
+
 els.pgnInput.value = SAMPLE_PGN;
-els.parseBtn.addEventListener("click", parsePgnFromInput);
+els.parseBtn.addEventListener("click", parseNotationFromInput);
 els.clearBtn.addEventListener("click", clearApp);
 els.sampleBtn.addEventListener("click", () => {
   els.pgnInput.value = SAMPLE_PGN;
-  parsePgnFromInput();
+  parseNotationFromInput();
 });
 els.firstBtn.addEventListener("click", () => setActivePly(0));
 els.prevBtn.addEventListener("click", () => setActivePly(Math.max(0, state.activePly - 1)));
 els.nextBtn.addEventListener("click", () => setActivePly(Math.min(state.history.length - 1, state.activePly + 1)));
 els.lastBtn.addEventListener("click", () => setActivePly(state.history.length - 1));
 els.analyzeBtn.addEventListener("click", analyzeCurrentPosition);
+els.themeToggle.addEventListener("click", toggleTheme);
+els.flipBoardBtn.addEventListener("click", flipBoard);
+els.boardThemeSelect.addEventListener("change", (event) => setBoardTheme(event.target.value));
+els.pieceStyleSelect.addEventListener("change", (event) => setPieceStyle(event.target.value));
+els.piecePaletteSelect.addEventListener("change", (event) => setPiecePalette(event.target.value));
 
-parsePgnFromInput();
+parseNotationFromInput();
 
 function createGame() {
   return gameFromFen(START_FEN);
 }
 
 function gameFromFen(fen) {
-  const [placement, turn, castling, ep, halfmove, fullmove] = fen.split(/\s+/);
+  const normalized = normalizeFen(fen);
+  const [placement, turn, castling, ep, halfmove, fullmove] = normalized.split(/\s+/);
   const board = Array.from({ length: 8 }, () => Array(8).fill(null));
   placement.split("/").forEach((rank, r) => {
     let c = 0;
@@ -109,9 +147,21 @@ function cloneGame(game) {
   };
 }
 
-function parsePgnFromInput() {
+function parseNotationFromInput() {
   try {
-    const tokens = tokenizePgn(els.pgnInput.value);
+    const notation = els.pgnInput.value.trim();
+    if (!notation) throw new Error("Paste a PGN game or FEN position first.");
+    if (looksLikeFen(notation)) loadFen(notation);
+    else loadPgn(notation);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+function loadPgn(pgn) {
+    const tokens = tokenizePgn(pgn);
+    if (!tokens.length) throw new Error("The PGN does not contain any moves.");
+    const headers = parsePgnHeaders(pgn);
     const game = createGame();
     const history = [{ game: cloneGame(game), san: "Start", move: null }];
 
@@ -126,11 +176,73 @@ function parsePgnFromInput() {
     state.history = history;
     state.activePly = history.length - 1;
     state.bestMove = null;
-    setStatus(`Loaded ${tokens.length} moves. Select any position and run analysis.`);
+    state.players = {
+      white: playerName(headers.White, "Player 1", "White"),
+      black: playerName(headers.Black, "Player 2", "Black")
+    };
+    state.inputFormat = "pgn";
+    const loadedMessage = `PGN loaded: ${tokens.length} moves.`;
+    setStatus(loadedMessage);
     render();
-  } catch (error) {
-    setStatus(error.message, true);
+    analyzeCurrentPosition({ automatic: true, loadedMessage });
+}
+
+function loadFen(fen) {
+  const game = gameFromFen(fen);
+  state.game = cloneGame(game);
+  state.history = [{ game: cloneGame(game), san: "Position", move: null }];
+  state.activePly = 0;
+  state.bestMove = null;
+  state.players = { white: "Player 1", black: "Player 2" };
+  state.inputFormat = "fen";
+  const loadedMessage = `FEN position loaded. ${game.turn === "w" ? "White" : "Black"} to move.`;
+  setStatus(loadedMessage);
+  render();
+  analyzeCurrentPosition({ automatic: true, loadedMessage });
+}
+
+function looksLikeFen(notation) {
+  return notation.split(/\s+/)[0]?.split("/").length === 8;
+}
+
+function normalizeFen(fen) {
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length === 4) parts.push("0", "1");
+  if (parts.length !== 6) throw new Error("FEN must contain four or six space-separated fields.");
+
+  const [placement, turn, castling, ep, halfmove, fullmove] = parts;
+  const ranks = placement.split("/");
+  if (ranks.length !== 8) throw new Error("FEN placement must contain eight ranks.");
+
+  for (const rank of ranks) {
+    if (!/^[prnbqkPRNBQK1-8]+$/.test(rank)) throw new Error("FEN contains an invalid piece or rank character.");
+    const width = [...rank].reduce((total, char) => total + (/\d/.test(char) ? Number(char) : 1), 0);
+    if (width !== 8) throw new Error("Each FEN rank must describe exactly eight squares.");
   }
+
+  if ((placement.match(/K/g) || []).length !== 1 || (placement.match(/k/g) || []).length !== 1) {
+    throw new Error("FEN must contain exactly one white king and one black king.");
+  }
+  if (!/^[wb]$/.test(turn)) throw new Error('FEN active color must be "w" or "b".');
+  if (!/^(?:-|K?Q?k?q?)$/.test(castling)) throw new Error("FEN castling rights are invalid.");
+  if (!/^(?:-|[a-h][36])$/.test(ep)) throw new Error("FEN en-passant square is invalid.");
+  if (!/^\d+$/.test(halfmove)) throw new Error("FEN halfmove clock must be a non-negative number.");
+  if (!/^[1-9]\d*$/.test(fullmove)) throw new Error("FEN fullmove number must be positive.");
+
+  return parts.join(" ");
+}
+
+function parsePgnHeaders(pgn) {
+  const headers = {};
+  for (const match of pgn.matchAll(/^\s*\[([A-Za-z0-9_]+)\s+"([^"]*)"\]\s*$/gm)) {
+    headers[match[1]] = match[2].trim();
+  }
+  return headers;
+}
+
+function playerName(value, fallback, genericColor) {
+  if (!value || value === "?" || value.toLowerCase() === genericColor.toLowerCase()) return fallback;
+  return value;
 }
 
 function tokenizePgn(pgn) {
@@ -157,7 +269,9 @@ function clearApp() {
   state.history = [{ game: createGame(), san: "Start", move: null }];
   state.activePly = 0;
   state.bestMove = null;
-  setStatus("Ready for a PGN.");
+  state.players = { white: "Player 1", black: "Player 2" };
+  state.inputFormat = "pgn";
+  setStatus("Ready for PGN or FEN notation.");
   render();
 }
 
@@ -165,17 +279,38 @@ function render() {
   const current = state.history[state.activePly]?.game || createGame();
   renderBoard(current);
   renderEvaluationBar(current);
+  renderPlayerLabels(current);
   renderMoveList();
   renderAnalysis(current);
   updateControls();
+}
+
+function renderPlayerLabels(game) {
+  const topColor = state.orientation === "white" ? "black" : "white";
+  const bottomColor = topColor === "white" ? "black" : "white";
+  setPlayerLabel("top", topColor, game.turn);
+  setPlayerLabel("bottom", bottomColor, game.turn);
+}
+
+function setPlayerLabel(side, color, turn) {
+  const label = side === "top" ? els.topPlayer : els.bottomPlayer;
+  const name = side === "top" ? els.topPlayerName : els.bottomPlayerName;
+  const colorLabel = side === "top" ? els.topPlayerColor : els.bottomPlayerColor;
+  const shortColor = color === "white" ? "w" : "b";
+  name.textContent = state.players[color];
+  colorLabel.textContent = color[0].toUpperCase() + color.slice(1);
+  label.classList.toggle("active", turn === shortColor);
+  label.setAttribute("aria-label", `${state.players[color]}, ${color}${turn === shortColor ? ", to move" : ""}`);
 }
 
 function renderBoard(game) {
   els.board.innerHTML = "";
   const arrow = createArrowLayer(state.bestMove);
 
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
+  for (let displayRow = 0; displayRow < 8; displayRow++) {
+    for (let displayCol = 0; displayCol < 8; displayCol++) {
+      const r = state.orientation === "white" ? displayRow : 7 - displayRow;
+      const c = state.orientation === "white" ? displayCol : 7 - displayCol;
       const square = document.createElement("div");
       const name = coordsToSquare(r, c);
       const piece = game.board[r][c];
@@ -189,6 +324,7 @@ function renderBoard(game) {
       if (piece) {
         const pieceEl = document.createElement("span");
         pieceEl.className = "piece";
+        pieceEl.dataset.color = colorOf(piece);
         pieceEl.textContent = PIECES[piece];
         pieceEl.draggable = colorOf(piece) === game.turn;
         pieceEl.addEventListener("dragstart", (event) => handleDragStart(event, name));
@@ -196,10 +332,10 @@ function renderBoard(game) {
         square.append(pieceEl);
       }
 
-      if (r === 7 || c === 0) {
+      if (displayRow === 7 || displayCol === 0) {
         const coord = document.createElement("span");
         coord.className = "coord";
-        coord.textContent = `${c === 0 ? RANKS[r] : ""}${r === 7 ? FILES[c] : ""}`;
+        coord.textContent = `${displayCol === 0 ? name[1] : ""}${displayRow === 7 ? name[0] : ""}`;
         square.append(coord);
       }
 
@@ -301,6 +437,7 @@ function handlePointerDragStart(event, from, piece) {
   event.preventDefault();
   const ghost = document.createElement("div");
   ghost.className = "piece drag-ghost";
+  ghost.dataset.color = colorOf(piece);
   ghost.textContent = PIECES[piece];
   document.body.append(ghost);
   state.pointerDrag = { from, ghost };
@@ -367,7 +504,11 @@ function renderEvaluationBar(game) {
   els.whiteEvalFill.style.height = `${whitePercent}%`;
   els.blackEvalFill.style.height = `${blackPercent}%`;
   els.positionEval.textContent = formatEval(score);
-  els.positionEval.style.color = score > 25 ? "#0b5e58" : score < -25 ? "#202936" : "var(--muted)";
+  els.positionEval.style.color = score > 25 ? "var(--accent-strong)" : score < -25 ? "var(--ink)" : "var(--muted)";
+  const isFlipped = state.orientation === "black";
+  els.evalBar.classList.toggle("flipped", isFlipped);
+  els.evalTopLabel.textContent = isFlipped ? "White" : "Black";
+  els.evalBottomLabel.textContent = isFlipped ? "Black" : "White";
 }
 
 function renderAnalysis(game) {
@@ -391,7 +532,9 @@ function updateControls() {
   els.lastBtn.disabled = !hasHistory || state.activePly >= state.history.length - 1;
   els.analyzeBtn.disabled = state.analyzing;
   els.parseBtn.disabled = state.analyzing;
-  els.positionLabel.textContent = state.activePly === 0 ? "Start position" : `After ${state.history[state.activePly].san}`;
+  els.positionLabel.textContent = state.activePly === 0
+    ? state.inputFormat === "fen" ? "FEN position" : "Start position"
+    : `After ${state.history[state.activePly].san}`;
 }
 
 async function analyzeCurrentPosition(options = {}) {
@@ -408,7 +551,8 @@ async function analyzeCurrentPosition(options = {}) {
   state.bestMove = best;
   state.analyzing = false;
   els.engineName.textContent = "Prototype evaluator";
-  setStatus(best ? `Best move found: ${best.san || best.uci}.` : "No legal moves in this position.");
+  const resultMessage = best ? `Best move found: ${best.san || best.uci}.` : "No legal moves in this position.";
+  setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage);
   render();
 }
 
@@ -815,11 +959,88 @@ function squareToCoords(square) {
 }
 
 function squareCenter(square) {
-  const [r, c] = squareToCoords(square);
+  let [r, c] = squareToCoords(square);
+  if (state.orientation === "black") {
+    r = 7 - r;
+    c = 7 - c;
+  }
   return {
     x: c * 12.5 + 6.25,
     y: r * 12.5 + 6.25
   };
+}
+
+function readPreference(key, fallback) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function savePreference(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {
+    // Preferences remain active for the current session when storage is unavailable.
+  }
+}
+
+function applyPreferences() {
+  const theme = document.documentElement.dataset.theme || "light";
+  setInterfaceTheme(theme);
+  setBoardTheme(state.boardTheme);
+  setPieceStyle(state.pieceStyle);
+  setPiecePalette(state.piecePalette);
+  updateOrientationControl();
+}
+
+function toggleTheme() {
+  setInterfaceTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+}
+
+function setInterfaceTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  els.themeToggle.setAttribute("aria-checked", String(theme === "dark"));
+  els.themeLabel.textContent = theme === "dark" ? "Light" : "Dark";
+  savePreference("chess-ui-theme", theme);
+}
+
+function flipBoard() {
+  state.orientation = state.orientation === "white" ? "black" : "white";
+  savePreference("chess-board-orientation", state.orientation);
+  updateOrientationControl();
+  render();
+}
+
+function updateOrientationControl() {
+  const blackAtBottom = state.orientation === "black";
+  els.flipBoardBtn.setAttribute("aria-pressed", String(blackAtBottom));
+  els.flipBoardBtn.title = blackAtBottom ? "Show White at bottom" : "Show Black at bottom";
+  els.flipBoardBtn.setAttribute("aria-label", els.flipBoardBtn.title);
+}
+
+function setBoardTheme(theme) {
+  state.boardTheme = theme;
+  document.documentElement.dataset.boardTheme = theme;
+  els.boardThemeSelect.value = theme;
+  savePreference("chess-board-theme", theme);
+}
+
+function setPieceStyle(style) {
+  if (!PIECE_STYLES.includes(style)) style = "classic";
+  state.pieceStyle = style;
+  document.documentElement.dataset.pieceStyle = style;
+  els.pieceStyleSelect.value = style;
+  savePreference("chess-piece-style", style);
+}
+
+function setPiecePalette(palette) {
+  if (!PIECE_PALETTES.includes(palette)) palette = "black-white";
+  state.piecePalette = palette;
+  document.documentElement.dataset.piecePalette = palette;
+  els.piecePaletteSelect.value = palette;
+  savePreference("chess-piece-palette", palette);
 }
 
 function shortenArrow(from, to) {

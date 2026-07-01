@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PGN Best Move Analyzer</title>
+    <title>Chess Position Analyzer</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("chess-ui-theme") || "light";
+      } catch (_) {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
@@ -11,9 +18,13 @@
       <section class="workspace">
         <aside class="panel input-panel">
           <div class="panel-header">
-            <div>
-              <h1>PGN Analyzer</h1>
-              <p>Load a game, select a position, and draw the engine's best move.</p>
+            <div class="brand-lockup">
+              <span class="brand-mark" aria-hidden="true">♞</span>
+              <div>
+                <span class="eyebrow">Analysis workspace</span>
+              <h1>Chess Analyzer</h1>
+              <p>Load a game or position, then explore the engine's best move.</p>
+              </div>
             </div>
             <button id="sampleBtn" class="icon-button" title="Load sample PGN" aria-label="Load sample PGN">
               <span aria-hidden="true">↺</span>
@@ -21,19 +32,61 @@
           </div>
 
           <label class="field">
-            <span>PGN</span>
-            <textarea id="pgnInput" spellcheck="false" placeholder="Paste a PGN game here"></textarea>
+            <span>Game notation</span>
+            <textarea id="pgnInput" spellcheck="false" placeholder="Paste a PGN game or FEN position"></textarea>
           </label>
 
           <div class="actions">
-            <button id="parseBtn" class="primary">Analyze PGN</button>
+            <button id="parseBtn" class="primary">Load &amp; Analyze</button>
             <button id="clearBtn">Clear</button>
           </div>
 
-          <div id="status" class="status" role="status">Ready for a PGN.</div>
+          <div id="status" class="status" role="status">Ready for PGN or FEN notation.</div>
         </aside>
 
         <section class="board-panel">
+          <div class="appearance-bar" aria-label="Appearance settings">
+            <div class="appearance-title">
+              <span class="eyebrow">Board studio</span>
+              <strong>Position explorer</strong>
+            </div>
+            <div class="appearance-controls">
+              <label class="select-control">
+                <span>Board</span>
+                <select id="boardThemeSelect" aria-label="Board theme">
+                  <option value="ice-blue">Ice Blue</option>
+                  <option value="michigan">Michigan</option>
+                  <option value="tournament">Tournament Green</option>
+                  <option value="terracotta">Terracotta</option>
+                  <option value="graphite">Graphite</option>
+                </select>
+              </label>
+              <label class="select-control">
+                <span>Pieces</span>
+                <select id="pieceStyleSelect" aria-label="Piece style">
+                  <option value="classic">Classic</option>
+                  <option value="modern">Modern</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </label>
+              <label class="select-control">
+                <span>Piece Colors</span>
+                <select id="piecePaletteSelect" aria-label="Piece colors">
+                  <option value="black-white">Black &amp; White</option>
+                  <option value="ivory-charcoal">Ivory &amp; Charcoal</option>
+                  <option value="high-contrast">High Contrast</option>
+                  <option value="michigan-pieces">Michigan</option>
+                </select>
+              </label>
+              <button id="flipBoardBtn" class="icon-button" title="Flip board" aria-label="Flip board" aria-pressed="false">
+                <span aria-hidden="true">⇅</span>
+              </button>
+              <button id="themeToggle" class="theme-toggle" type="button" role="switch" aria-checked="false">
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span id="themeLabel">Dark</span>
+              </button>
+            </div>
+          </div>
           <div class="toolbar">
             <div class="move-controls">
               <button id="firstBtn" class="icon-button" title="Start" aria-label="Start">⏮</button>
@@ -47,16 +100,28 @@
 
           <div class="stage">
             <div class="board-area">
-              <div class="eval-bar" aria-label="Position evaluation">
-                <span class="eval-side black">Black</span>
+              <div id="evalBar" class="eval-bar" aria-label="Position evaluation">
+                <span id="evalTopLabel" class="eval-side black">Black</span>
                 <div class="eval-track">
                   <div id="blackEvalFill" class="eval-fill black-fill"></div>
                   <div id="whiteEvalFill" class="eval-fill white-fill"></div>
                   <div class="eval-midline"></div>
                 </div>
-                <span class="eval-side white">White</span>
+                <span id="evalBottomLabel" class="eval-side white">White</span>
               </div>
-              <div id="board" class="board" aria-label="Chessboard"></div>
+              <div class="board-stack">
+                <div id="topPlayer" class="player-label" aria-label="Top player">
+                  <span class="turn-indicator" aria-hidden="true"></span>
+                  <strong id="topPlayerName">Player 2</strong>
+                  <span id="topPlayerColor">Black</span>
+                </div>
+                <div id="board" class="board" aria-label="Chessboard"></div>
+                <div id="bottomPlayer" class="player-label" aria-label="Bottom player">
+                  <span class="turn-indicator" aria-hidden="true"></span>
+                  <strong id="bottomPlayerName">Player 1</strong>
+                  <span id="bottomPlayerColor">White</span>
+                </div>
+              </div>
             </div>
             <div class="analysis">
               <div class="metric eval-summary">
@@ -89,6 +154,6 @@
       </section>
     </main>
 
-    <script type="module" src="./src/app.js"></script>
+    <script defer src="./src/app.js"></script>
   </body>
 </html>
