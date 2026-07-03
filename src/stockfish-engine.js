@@ -8,26 +8,33 @@
       this.pendingSearch = null;
       this.lineWaiters = [];
       this.requestId = 0;
+      this.transition = Promise.resolve();
     }
 
     initialize() {
       if (this.initialization) return this.initialization;
 
       this.initialization = new Promise((resolve, reject) => {
+        let worker;
         try {
-          this.worker = new Worker(this.workerUrl);
+          worker = new Worker(this.workerUrl);
+          this.worker = worker;
         } catch (error) {
+          this.initialization = null;
           reject(error);
           return;
         }
 
         const fail = (message) => {
-          reject(new Error(message || "Stockfish failed to load."));
+          const error = new Error(message || "Stockfish failed to load.");
+          if (this.worker !== worker) return;
+          reject(error);
+          this.resetWorker(error, worker);
         };
 
         this.worker.addEventListener("error", (event) => {
           fail(event.message || "Stockfish worker error.");
-        }, { once: true });
+        });
 
         this.worker.addEventListener("message", (event) => {
           if (typeof event.data === "string") this.handleLine(event.data);
@@ -49,10 +56,33 @@
 
     async analyze(fen, options = {}) {
       const requestId = ++this.requestId;
+      let lastError;
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          options.onStatus?.(attempt ? "restarting" : "starting");
+          const result = await this.analyzeOnce(fen, options, requestId);
+          options.onStatus?.("ready");
+          return result;
+        } catch (error) {
+          if (error.name === "AbortError" || requestId !== this.requestId) throw error;
+          lastError = error;
+          this.resetWorker(error);
+        }
+      }
+
+      lastError.isStockfishEngineError = true;
+      throw lastError;
+    }
+
+    async analyzeOnce(fen, options, requestId) {
       await this.initialize();
-      if (requestId !== this.requestId) throw new DOMException("Analysis superseded.", "AbortError");
-      await this.stop();
-      if (requestId !== this.requestId) throw new DOMException("Analysis superseded.", "AbortError");
+      this.assertCurrent(requestId);
+      await this.queueTransition(() => {
+        this.assertCurrent(requestId);
+        return this.stopNow();
+      });
+      this.assertCurrent(requestId);
 
       const depth = options.depth || 12;
       const multiPv = Math.max(1, Math.min(5, options.multiPv || 1));
@@ -87,6 +117,10 @@
     }
 
     async stop() {
+      return this.queueTransition(() => this.stopNow());
+    }
+
+    async stopNow() {
       if (!this.worker) return;
 
       if (this.pendingSearch) {
@@ -102,6 +136,43 @@
     cancel() {
       this.requestId += 1;
       return this.stop();
+    }
+
+    queueTransition(operation) {
+      const next = this.transition.catch(() => {}).then(operation);
+      this.transition = next;
+      return next;
+    }
+
+    assertCurrent(requestId) {
+      if (requestId !== this.requestId) {
+        throw new DOMException("Analysis superseded.", "AbortError");
+      }
+    }
+
+    resetWorker(error, expectedWorker = this.worker) {
+      if (expectedWorker && this.worker !== expectedWorker) return;
+
+      const worker = this.worker;
+      this.worker = null;
+      this.initialization = null;
+
+      if (this.pendingSearch) {
+        const pending = this.pendingSearch;
+        this.pendingSearch = null;
+        pending.reject(error || new Error("Stockfish worker stopped."));
+      }
+
+      for (const waiter of this.lineWaiters.splice(0)) {
+        clearTimeout(waiter.timeout);
+        waiter.reject(error || new Error("Stockfish worker stopped."));
+      }
+
+      try {
+        worker?.terminate();
+      } catch (_) {
+        // The worker may already have terminated itself.
+      }
     }
 
     synchronize() {

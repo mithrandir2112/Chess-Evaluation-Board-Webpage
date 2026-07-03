@@ -17,8 +17,9 @@ const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const FILES = "abcdefgh";
 const RANKS = "87654321";
 const DEFAULT_STOCKFISH_DEPTH = 14;
-const PIECE_STYLES = ["classic", "modern", "minimal"];
-const PIECE_PALETTES = ["black-white", "ivory-charcoal", "high-contrast", "michigan-pieces"];
+const PIECE_STYLES = ["classic", "modern", "minimal", "vector", "broadcast"];
+const PIECE_PALETTES = ["black-white", "ivory-charcoal", "high-contrast", "michigan-pieces", "steel-charcoal"];
+const RED_WINGS_INCOMPATIBLE_PALETTES = new Set(["black-white", "ivory-charcoal", "high-contrast"]);
 const SAMPLE_PGN = `[Event "Sample"]
 [Site "Local"]
 [Date "2026.05.26"]
@@ -37,11 +38,13 @@ const state = {
   engineScore: null,
   engineDepth: 0,
   engineName: "Stockfish 18 Lite",
+  engineStatus: "idle",
   candidates: [],
   analysisDepth: clampDepth(Number(readPreference("chess-analysis-depth", DEFAULT_STOCKFISH_DEPTH))),
   analyzing: false,
   analysisId: 0,
   pointerDrag: null,
+  selectedSquare: null,
   players: { white: "Player 1", black: "Player 2" },
   inputFormat: "pgn",
   orientation: readPreference("chess-board-orientation", "white"),
@@ -49,6 +52,7 @@ const state = {
   pieceStyle: readPreference("chess-piece-style", "classic"),
   piecePalette: readPreference("chess-piece-palette", null)
 };
+state.paletteBeforeRestrictedTheme = null;
 
 if (state.pieceStyle === "contrast") {
   state.pieceStyle = "classic";
@@ -109,6 +113,7 @@ const els = {
 const stockfishEngine = new window.StockfishEngine({
   workerUrl: new URL("./public/vendor/stockfish/stockfish-18-lite-single.js", document.baseURI).href
 });
+let automaticAnalysisTimer = null;
 
 applyPreferences();
 updateDepthControls();
@@ -134,6 +139,9 @@ els.flipBoardBtn.addEventListener("click", flipBoard);
 els.boardThemeSelect.addEventListener("change", (event) => setBoardTheme(event.target.value));
 els.pieceStyleSelect.addEventListener("change", (event) => setPieceStyle(event.target.value));
 els.piecePaletteSelect.addEventListener("change", (event) => setPiecePalette(event.target.value));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") clearPieceSelection();
+});
 
 setupResponsiveBoard();
 parseNotationFromInput();
@@ -249,6 +257,7 @@ function loadPgn(pgn) {
     state.game = game;
     state.history = history;
     state.activePly = history.length - 1;
+    state.selectedSquare = null;
     clearAnalysisResult();
     state.players = {
       white: playerName(headers.White, "Player 1", "White"),
@@ -258,7 +267,7 @@ function loadPgn(pgn) {
     const loadedMessage = `PGN loaded: ${tokens.length} moves.`;
     setStatus(loadedMessage);
     render();
-    analyzeCurrentPosition({ automatic: true, loadedMessage });
+    scheduleAutomaticAnalysis({ loadedMessage });
 }
 
 function loadFen(fen) {
@@ -266,13 +275,14 @@ function loadFen(fen) {
   state.game = cloneGame(game);
   state.history = [{ game: cloneGame(game), san: "Position", move: null }];
   state.activePly = 0;
+  state.selectedSquare = null;
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "fen";
   const loadedMessage = `FEN position loaded. ${game.turn === "w" ? "White" : "Black"} to move.`;
   setStatus(loadedMessage);
   render();
-  analyzeCurrentPosition({ automatic: true, loadedMessage });
+  scheduleAutomaticAnalysis({ loadedMessage });
 }
 
 function looksLikeFen(notation) {
@@ -334,14 +344,17 @@ function tokenizePgn(pgn) {
 
 function setActivePly(ply) {
   state.activePly = ply;
+  state.selectedSquare = null;
   clearAnalysisResult();
   render();
-  analyzeCurrentPosition({ automatic: true });
+  scheduleAutomaticAnalysis();
 }
 
 function clearApp() {
   state.analysisId += 1;
   state.analyzing = false;
+  state.engineStatus = "idle";
+  state.selectedSquare = null;
   stockfishEngine.cancel().catch(() => {});
   els.pgnInput.value = "";
   state.history = [{ game: createGame(), san: "Start", move: null }];
@@ -392,6 +405,10 @@ function setPlayerLabel(side, color, turn) {
 function renderBoard(game) {
   els.board.innerHTML = "";
   const arrow = createArrowLayer(state.bestMove);
+  const selectedMoves = state.selectedSquare
+    ? legalMoves(game).filter((move) => move.from === state.selectedSquare)
+    : [];
+  const destinations = new Map(selectedMoves.map((move) => [move.to, move]));
 
   for (let displayRow = 0; displayRow < 8; displayRow++) {
     for (let displayCol = 0; displayCol < 8; displayCol++) {
@@ -401,19 +418,29 @@ function renderBoard(game) {
       const name = coordsToSquare(r, c);
       const piece = game.board[r][c];
       square.className = `square ${(r + c) % 2 ? "dark" : "light"}`;
+      if (state.selectedSquare === name) square.classList.add("selected-piece-square");
       if (state.bestMove?.from === name) square.classList.add("from");
       if (state.bestMove?.to === name) square.classList.add("to");
       square.dataset.square = name;
       square.addEventListener("dragover", handleDragOver);
       square.addEventListener("drop", handleDrop);
+      square.addEventListener("click", (event) => handleSquareClick(event, name));
+
+      const legalMove = destinations.get(name);
+      if (legalMove) {
+        const marker = document.createElement("span");
+        marker.className = `legal-move-marker ${legalMove.capture ? "capture" : "destination"}`;
+        marker.setAttribute("aria-hidden", "true");
+        square.append(marker);
+      }
 
       if (piece) {
         const pieceEl = document.createElement("span");
         pieceEl.className = "piece";
         pieceEl.dataset.color = colorOf(piece);
+        pieceEl.dataset.piece = piece.toLowerCase();
         pieceEl.textContent = PIECES[piece];
-        pieceEl.draggable = colorOf(piece) === game.turn;
-        pieceEl.addEventListener("dragstart", (event) => handleDragStart(event, name));
+        pieceEl.draggable = false;
         pieceEl.addEventListener("pointerdown", (event) => handlePointerDragStart(event, name, piece));
         square.append(pieceEl);
       }
@@ -522,34 +549,140 @@ function handleDrop(event) {
 function handlePointerDragStart(event, from, piece) {
   if (event.button !== 0 || colorOf(piece) !== state.history[state.activePly].game.turn) return;
   event.preventDefault();
-  const ghost = document.createElement("div");
-  ghost.className = "piece drag-ghost";
-  ghost.dataset.color = colorOf(piece);
-  ghost.textContent = PIECES[piece];
-  document.body.append(ghost);
-  state.pointerDrag = { from, ghost };
-  moveDragGhost(event);
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  state.pointerDrag = {
+    from,
+    piece,
+    pointerId: event.pointerId,
+    source: event.currentTarget,
+    ghost: null,
+    moved: false,
+    startX: event.clientX,
+    startY: event.clientY
+  };
   document.addEventListener("pointermove", handlePointerDragMove);
-  document.addEventListener("pointerup", handlePointerDragEnd, { once: true });
+  window.addEventListener("pointerup", handlePointerDragEnd, true);
+  window.addEventListener("pointercancel", handlePointerDragCancel, true);
 }
 
 function handlePointerDragMove(event) {
-  if (!state.pointerDrag) return;
+  if (!state.pointerDrag || event.pointerId !== state.pointerDrag.pointerId) return;
+  const drag = state.pointerDrag;
+  if (drag.moved && event.pointerType === "mouse" && event.buttons === 0) {
+    handlePointerDragEnd(event);
+    return;
+  }
+  if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return;
   event.preventDefault();
+  if (!drag.ghost) {
+    const ghost = document.createElement("div");
+    ghost.className = "piece drag-ghost";
+    ghost.dataset.color = colorOf(drag.piece);
+    ghost.dataset.piece = drag.piece.toLowerCase();
+    ghost.textContent = PIECES[drag.piece];
+    document.body.append(ghost);
+    drag.ghost = ghost;
+    drag.moved = true;
+  }
   moveDragGhost(event);
 }
 
 function handlePointerDragEnd(event) {
-  if (!state.pointerDrag) return;
+  if (!state.pointerDrag || event.pointerId !== state.pointerDrag.pointerId) return;
   event.preventDefault();
-  const { from, ghost } = state.pointerDrag;
-  ghost.remove();
-  state.pointerDrag = null;
-  document.removeEventListener("pointermove", handlePointerDragMove);
+  const { from, moved, source, pointerId } = state.pointerDrag;
+  finishPointerDrag();
+  try {
+    source.releasePointerCapture?.(pointerId);
+  } catch (_) {
+    // Capture may already be released when Safari ends the gesture.
+  }
 
-  const targetSquare = document.elementFromPoint(event.clientX, event.clientY)?.closest(".square")?.dataset.square;
+  const targetSquare = resolveDropSquare(from, event.clientX, event.clientY);
+  if (!moved) {
+    setTimeout(() => selectPiece(from), 0);
+    return;
+  }
   if (!targetSquare || targetSquare === from) return;
   playMove(from, targetSquare);
+}
+
+function resolveDropSquare(from, clientX, clientY) {
+  const directSquare = document.elementFromPoint(clientX, clientY)?.closest(".square")?.dataset.square || null;
+  const game = state.history[state.activePly].game;
+  const legalDestinations = new Set(
+    legalMoves(game).filter((move) => move.from === from).map((move) => move.to)
+  );
+  if (directSquare && legalDestinations.has(directSquare)) return directSquare;
+
+  const tolerance = els.board.getBoundingClientRect().width / 8 * 0.15;
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const destination of legalDestinations) {
+    const square = els.board.querySelector(`[data-square="${destination}"]`);
+    if (!square) continue;
+    const rect = square.getBoundingClientRect();
+    const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+    const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+    if (dx > tolerance || dy > tolerance) continue;
+    const distance = Math.hypot(dx, dy);
+    if (distance < nearestDistance) {
+      nearest = destination;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest || directSquare;
+}
+
+function handlePointerDragCancel(event) {
+  if (!state.pointerDrag || event.pointerId !== state.pointerDrag.pointerId) return;
+  finishPointerDrag();
+}
+
+function finishPointerDrag() {
+  state.pointerDrag?.ghost?.remove();
+  state.pointerDrag = null;
+  document.removeEventListener("pointermove", handlePointerDragMove);
+  window.removeEventListener("pointerup", handlePointerDragEnd, true);
+  window.removeEventListener("pointercancel", handlePointerDragCancel, true);
+}
+
+function handleSquareClick(event, square) {
+  const game = state.history[state.activePly].game;
+  const [r, c] = squareToCoords(square);
+  const piece = game.board[r][c];
+
+  if (event.target.closest(".piece") && piece && colorOf(piece) === game.turn) return;
+
+  if (state.selectedSquare) {
+    const move = legalMoves(game).find((candidate) => (
+      candidate.from === state.selectedSquare && candidate.to === square
+    ));
+    if (move) {
+      playMove(move.from, move.to, move.promotion);
+      return;
+    }
+  }
+
+  if (piece && colorOf(piece) === game.turn) selectPiece(square);
+  else clearPieceSelection();
+}
+
+function selectPiece(square) {
+  const game = state.history[state.activePly].game;
+  const [r, c] = squareToCoords(square);
+  const piece = game.board[r][c];
+  if (!piece || colorOf(piece) !== game.turn) return;
+  state.selectedSquare = state.selectedSquare === square ? null : square;
+  renderBoard(game);
+}
+
+function clearPieceSelection() {
+  if (!state.selectedSquare) return;
+  state.selectedSquare = null;
+  renderBoard(state.history[state.activePly].game);
 }
 
 function moveDragGhost(event) {
@@ -578,10 +711,11 @@ function playMove(from, to, promotion = "q") {
     { game: cloneGame(game), san, move }
   ];
   state.activePly = state.history.length - 1;
+  state.selectedSquare = null;
   clearAnalysisResult();
   setStatus(`Played ${san}. Updating best move...`);
   render();
-  analyzeCurrentPosition({ automatic: true });
+  scheduleAutomaticAnalysis();
 }
 
 function renderEvaluationBar(game) {
@@ -652,7 +786,11 @@ function updateControls() {
   els.parseBtn.disabled = state.analyzing;
   els.stopBtn.hidden = !state.analyzing;
   els.analysisProgress.textContent = state.analyzing
-    ? `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
+    ? state.engineStatus === "restarting"
+      ? "Restarting Stockfish..."
+      : state.engineStatus === "starting" && !state.engineDepth
+        ? "Starting Stockfish..."
+        : `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
     : state.engineDepth ? `Completed at depth ${state.engineDepth}` : "Ready";
   els.positionLabel.textContent = state.activePly === 0
     ? state.inputFormat === "fen" ? "FEN position" : "Start position"
@@ -660,9 +798,14 @@ function updateControls() {
 }
 
 async function analyzeCurrentPosition(options = {}) {
+  if (!options.automatic && automaticAnalysisTimer !== null) {
+    clearTimeout(automaticAnalysisTimer);
+    automaticAnalysisTimer = null;
+  }
   const game = cloneGame(state.history[state.activePly].game);
   const analysisId = ++state.analysisId;
   state.analyzing = true;
+  state.engineStatus = "starting";
   clearAnalysisResult();
   state.engineName = "Stockfish 18 Lite";
   if (!options.automatic) setStatus("Analyzing selected position...");
@@ -673,6 +816,11 @@ async function analyzeCurrentPosition(options = {}) {
       depth: state.analysisDepth,
       multiPv: 3,
       timeoutMs: 300000,
+      onStatus: (status) => {
+        if (analysisId !== state.analysisId) return;
+        state.engineStatus = status;
+        updateControls();
+      },
       onInfo: (info) => {
         if (analysisId !== state.analysisId) return;
         if (info.score) state.engineScore = info.score;
@@ -692,6 +840,7 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineName = result.engineName || "Stockfish 18 Lite";
     state.candidates = stockfishVariationsToMoves(game, result.variations);
     state.analyzing = false;
+    state.engineStatus = "ready";
     const resultMessage = state.bestMove
       ? `Stockfish depth ${state.engineDepth}: best move ${state.bestMove.san || state.bestMove.uci}.`
       : "No legal moves in this position.";
@@ -706,12 +855,34 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineDepth = 3;
     state.engineName = "Prototype fallback";
     state.analyzing = false;
+    state.engineStatus = "failed";
+    const failure = error.isStockfishEngineError
+      ? `Stockfish failed after an automatic retry (${error.message})`
+      : `Stockfish returned an unusable response (${error.message})`;
     const resultMessage = best
-      ? `Stockfish unavailable; prototype fallback suggests ${best.san || best.uci}.`
-      : "Stockfish unavailable and no legal moves were found.";
+      ? `${failure}; prototype fallback suggests ${best.san || best.uci}.`
+      : `${failure}; no legal moves were found.`;
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage, true);
     render();
   }
+}
+
+function scheduleAutomaticAnalysis(options = {}) {
+  const analysisAlreadyQueued = automaticAnalysisTimer !== null;
+  if (analysisAlreadyQueued) clearTimeout(automaticAnalysisTimer);
+
+  if (!analysisAlreadyQueued) {
+    state.analysisId += 1;
+    state.analyzing = false;
+    state.engineStatus = "idle";
+    stockfishEngine.cancel().catch(() => {});
+  }
+
+  updateControls();
+  automaticAnalysisTimer = setTimeout(() => {
+    automaticAnalysisTimer = null;
+    analyzeCurrentPosition({ ...options, automatic: true });
+  }, 180);
 }
 
 function stockfishVariationsToMoves(game, variations = []) {
@@ -738,6 +909,7 @@ function stopAnalysis() {
   if (!state.analyzing) return;
   state.analysisId += 1;
   state.analyzing = false;
+  state.engineStatus = "idle";
   stockfishEngine.cancel().catch(() => {});
   setStatus(`Analysis stopped at depth ${state.engineDepth || 0}.`);
   render();
@@ -749,7 +921,7 @@ function handleDepthSelection(event) {
   state.analysisDepth = isCustom ? clampDepth(Number(els.customDepthInput.value)) : Number(event.target.value);
   savePreference("chess-analysis-depth", state.analysisDepth);
   updateDepthWarning();
-  analyzeCurrentPosition({ automatic: true });
+  scheduleAutomaticAnalysis();
 }
 
 function handleCustomDepthChange() {
@@ -757,7 +929,7 @@ function handleCustomDepthChange() {
   els.customDepthInput.value = state.analysisDepth;
   savePreference("chess-analysis-depth", state.analysisDepth);
   updateDepthWarning();
-  analyzeCurrentPosition({ automatic: true });
+  scheduleAutomaticAnalysis();
 }
 
 function handleCustomDepthInput() {
@@ -1313,6 +1485,7 @@ function setInterfaceTheme(theme) {
 
 function flipBoard() {
   state.orientation = state.orientation === "white" ? "black" : "white";
+  state.selectedSquare = null;
   savePreference("chess-board-orientation", state.orientation);
   updateOrientationControl();
   render();
@@ -1326,10 +1499,22 @@ function updateOrientationControl() {
 }
 
 function setBoardTheme(theme) {
+  const leavingRestrictedTheme = state.boardTheme === "red-wings" && theme !== "red-wings";
   state.boardTheme = theme;
   document.documentElement.dataset.boardTheme = theme;
   els.boardThemeSelect.value = theme;
   savePreference("chess-board-theme", theme);
+
+  if (theme === "red-wings" && RED_WINGS_INCOMPATIBLE_PALETTES.has(state.piecePalette)) {
+    state.paletteBeforeRestrictedTheme = state.piecePalette;
+    setPiecePalette("steel-charcoal");
+  } else if (leavingRestrictedTheme && state.paletteBeforeRestrictedTheme) {
+    const previousPalette = state.paletteBeforeRestrictedTheme;
+    state.paletteBeforeRestrictedTheme = null;
+    setPiecePalette(previousPalette);
+  }
+
+  updatePiecePaletteAvailability();
 }
 
 function setPieceStyle(style) {
@@ -1342,10 +1527,20 @@ function setPieceStyle(style) {
 
 function setPiecePalette(palette) {
   if (!PIECE_PALETTES.includes(palette)) palette = "black-white";
+  if (state.boardTheme === "red-wings" && RED_WINGS_INCOMPATIBLE_PALETTES.has(palette)) {
+    palette = "steel-charcoal";
+  }
   state.piecePalette = palette;
   document.documentElement.dataset.piecePalette = palette;
   els.piecePaletteSelect.value = palette;
   savePreference("chess-piece-palette", palette);
+}
+
+function updatePiecePaletteAvailability() {
+  const restricted = state.boardTheme === "red-wings";
+  for (const option of els.piecePaletteSelect.options) {
+    option.disabled = restricted && RED_WINGS_INCOMPATIBLE_PALETTES.has(option.value);
+  }
 }
 
 function shortenArrow(from, to) {

@@ -17,6 +17,9 @@
   --danger-soft: #fae7e7;
   --light-square: #f8f6ef;
   --dark-square: #8fc7e8;
+  --selected-light-square: #d8edf8;
+  --selected-dark-square: #55c4dc;
+  --legal-move-marker: rgba(28, 42, 54, 0.18);
   --coord-ink: rgba(16, 36, 52, 0.62);
   --selected: #ffcb05;
   --arrow: #c94f2d;
@@ -50,6 +53,8 @@
 :root[data-board-theme="michigan"] {
   --light-square: #f2e3a6;
   --dark-square: #567da3;
+  --selected-light-square: #ffec8a;
+  --selected-dark-square: #789fc3;
   --coord-ink: rgba(0, 39, 76, 0.7);
   --arrow: #b53f30;
 }
@@ -57,6 +62,8 @@
 :root[data-board-theme="tournament"] {
   --light-square: #f3f1e7;
   --dark-square: #78956f;
+  --selected-light-square: #e5efbf;
+  --selected-dark-square: #9ab67f;
   --coord-ink: rgba(28, 51, 31, 0.68);
   --arrow: #c04f35;
 }
@@ -64,6 +71,8 @@
 :root[data-board-theme="terracotta"] {
   --light-square: #ead8bd;
   --dark-square: #b76f52;
+  --selected-light-square: #f3dfae;
+  --selected-dark-square: #db8e65;
   --coord-ink: rgba(72, 38, 28, 0.7);
   --arrow: #174d70;
 }
@@ -71,8 +80,75 @@
 :root[data-board-theme="graphite"] {
   --light-square: #e8ecef;
   --dark-square: #687783;
+  --selected-light-square: #f4f7d0;
+  --selected-dark-square: #8d9eaa;
   --coord-ink: rgba(21, 31, 39, 0.68);
   --arrow: #d39815;
+}
+
+:root[data-board-theme="lions"] {
+  --light-square: #c9cdd1;
+  --dark-square: #0076b6;
+  --selected-light-square: #e5e8eb;
+  --selected-dark-square: #18a5df;
+  --coord-ink: rgba(0, 34, 68, 0.78);
+  --arrow: #002244;
+}
+
+:root[data-board-theme="tigers"] {
+  --light-square: #f2e7d5;
+  --dark-square: #0c2340;
+  --selected-light-square: #ffe0b2;
+  --selected-dark-square: #28517c;
+  --coord-ink: rgba(12, 35, 64, 0.76);
+  --arrow: #fa4616;
+}
+
+:root[data-board-theme="red-wings"] {
+  --light-square: #f7f3ea;
+  --dark-square: #ce1126;
+  --selected-light-square: #fff0cd;
+  --selected-dark-square: #f04455;
+  --coord-ink: rgba(74, 6, 14, 0.78);
+  --arrow: #171717;
+}
+
+:root[data-board-theme="pistons"] {
+  --light-square: #d9dde2;
+  --dark-square: #1d42ba;
+  --selected-light-square: #eef1f4;
+  --selected-dark-square: #416be5;
+  --coord-ink: rgba(10, 31, 88, 0.78);
+  --arrow: #c8102e;
+}
+
+:root[data-board-theme="walnut"] {
+  --light-square: #e5d3b6;
+  --dark-square: #79513a;
+  --selected-light-square: #f1dfbd;
+  --selected-dark-square: #a27453;
+  --coord-ink: rgba(67, 40, 25, 0.72);
+  --arrow: #1d5e78;
+}
+
+:root[data-board-theme="midnight"] {
+  --light-square: #aebdcc;
+  --dark-square: #263548;
+  --selected-light-square: #cad9e6;
+  --selected-dark-square: #49627d;
+  --coord-ink: rgba(14, 25, 39, 0.78);
+  --arrow: #f2c94c;
+}
+
+:root[data-board-theme="accessibility"] {
+  --light-square: #ffffff;
+  --dark-square: #171717;
+  --selected-light-square: #fff36a;
+  --selected-dark-square: #007f99;
+  --legal-move-marker: rgba(0, 213, 255, 0.42);
+  --coord-ink: #000000;
+  --selected: #00d5ff;
+  --arrow: #ffbf00;
 }
 
 :root[data-piece-palette="ivory-charcoal"] {
@@ -94,6 +170,13 @@
   --white-piece-outline: #00274c;
   --black-piece: #00274c;
   --black-piece-outline: #ffdf64;
+}
+
+:root[data-piece-palette="steel-charcoal"] {
+  --white-piece: #aeb8c2;
+  --white-piece-outline: #20262d;
+  --black-piece: #242a31;
+  --black-piece-outline: #dce3e9;
 }
 
 * {
@@ -667,12 +750,41 @@ textarea:focus {
   background: var(--dark-square);
 }
 
+.square.selected-piece-square.light {
+  background: var(--selected-light-square);
+}
+
+.square.selected-piece-square.dark {
+  background: var(--selected-dark-square);
+}
+
+.legal-move-marker {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.legal-move-marker.destination {
+  width: 29%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--legal-move-marker);
+}
+
+.legal-move-marker.capture {
+  inset: 0;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1.1cqw var(--legal-move-marker);
+}
+
 .square.from,
 .square.to {
   box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--selected) 46%, transparent);
 }
 
 .piece {
+  position: relative;
+  z-index: 2;
   font-size: clamp(28px, 7vh, 68px);
   font-size: clamp(28px, 86cqh, 72px);
   line-height: 1;
@@ -690,6 +802,76 @@ textarea:focus {
 .piece[data-color="b"] {
   color: var(--black-piece);
   text-shadow: -1px -1px 0 var(--black-piece-outline), 1px -1px 0 var(--black-piece-outline), -1px 1px 0 var(--black-piece-outline), 1px 1px 0 var(--black-piece-outline), 0 2px 2px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-piece-style="vector"] .piece,
+:root[data-piece-style="broadcast"] .piece {
+  width: 86%;
+  height: 86%;
+  background: var(--piece-fill);
+  color: transparent;
+  font-size: 0;
+  filter: drop-shadow(1px 0 0 var(--piece-outline)) drop-shadow(-1px 0 0 var(--piece-outline)) drop-shadow(0 1px 0 var(--piece-outline)) drop-shadow(0 -1px 0 var(--piece-outline));
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+:root[data-piece-style="vector"] .piece[data-color="w"],
+:root[data-piece-style="broadcast"] .piece[data-color="w"] {
+  --piece-fill: var(--white-piece);
+  --piece-outline: var(--white-piece-outline);
+}
+
+:root[data-piece-style="vector"] .piece[data-color="b"],
+:root[data-piece-style="broadcast"] .piece[data-color="b"] {
+  --piece-fill: var(--black-piece);
+  --piece-outline: var(--black-piece-outline);
+}
+
+:root[data-piece-style="broadcast"] .piece {
+  width: 91%;
+  height: 91%;
+  filter: drop-shadow(1.5px 0 0 var(--piece-outline)) drop-shadow(-1.5px 0 0 var(--piece-outline)) drop-shadow(0 1.5px 0 var(--piece-outline)) drop-shadow(0 -1.5px 0 var(--piece-outline)) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="p"],
+:root[data-piece-style="broadcast"] .piece[data-piece="p"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/pawn.svg");
+  mask-image: url("../public/pieces/cc0-vector/pawn.svg");
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="r"],
+:root[data-piece-style="broadcast"] .piece[data-piece="r"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/rok.svg");
+  mask-image: url("../public/pieces/cc0-vector/rok.svg");
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="n"],
+:root[data-piece-style="broadcast"] .piece[data-piece="n"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/knight_3.svg");
+  mask-image: url("../public/pieces/cc0-vector/knight_3.svg");
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="b"],
+:root[data-piece-style="broadcast"] .piece[data-piece="b"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/bishop_0.svg");
+  mask-image: url("../public/pieces/cc0-vector/bishop_0.svg");
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="q"],
+:root[data-piece-style="broadcast"] .piece[data-piece="q"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/queen.svg");
+  mask-image: url("../public/pieces/cc0-vector/queen.svg");
+}
+
+:root[data-piece-style="vector"] .piece[data-piece="k"],
+:root[data-piece-style="broadcast"] .piece[data-piece="k"] {
+  -webkit-mask-image: url("../public/pieces/cc0-vector/king_1.svg");
+  mask-image: url("../public/pieces/cc0-vector/king_1.svg");
 }
 
 :root[data-piece-style="modern"] .piece {
