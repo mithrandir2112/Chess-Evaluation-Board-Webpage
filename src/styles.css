@@ -464,17 +464,8 @@ textarea:focus {
     max-width: 60px;
   }
 
-  #boardThemeSelect {
-    width: 76px;
-  }
 
-  #pieceStyleSelect {
-    width: 68px;
-  }
 
-  #piecePaletteSelect {
-    width: 88px;
-  }
 
   .appearance-bar .select-control select {
     padding-inline: 7px 20px;
@@ -495,17 +486,8 @@ textarea:focus {
     max-width: 52px;
   }
 
-  #boardThemeSelect {
-    width: 62px;
-  }
 
-  #pieceStyleSelect {
-    width: 58px;
-  }
 
-  #piecePaletteSelect {
-    width: 72px;
-  }
 
   .appearance-bar .icon-button {
     width: 32px;
@@ -534,6 +516,13 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.appearance-actions {
+  display: flex;
+  align-items: end;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
 .select-control {
   display: grid;
   gap: 4px;
@@ -545,7 +534,9 @@ textarea:focus {
 
 .select-control select {
   min-height: 40px;
-  max-width: 138px;
+  width: auto;
+  min-width: max-content;
+  max-width: none;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 32px 0 10px;
@@ -1371,9 +1362,13 @@ textarea:focus {
   }
 
   .appearance-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     align-items: end;
+  }
+
+  .appearance-controls .select-control {
+    flex: 1 0 auto;
   }
 
   .select-control select {
@@ -1382,12 +1377,13 @@ textarea:focus {
   }
 
   .appearance-controls > #flipBoardBtn {
-    width: 100%;
+    width: auto;
   }
 
   .theme-toggle {
     grid-column: 1 / -1;
     justify-self: end;
+    margin-inline-start: auto;
     justify-content: center;
   }
 
