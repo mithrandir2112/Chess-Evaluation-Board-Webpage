@@ -13,9 +13,12 @@ async function start(page, style) {
   await pauseAnalysis(page);
 }
 async function pauseAnalysis(page) {
-  // Stop through the real UI after the automatic search starts, so unrelated
-  // engine completion does not replace board nodes during geometry assertions.
-  await page.getByRole('button', { name: 'Stop analysis', exact: true }).click();
+  // Allow the app's 180ms automatic-analysis debounce to fire. A fast engine
+  // can finish before Stop is clicked, so stop only if it is still running.
+  await page.waitForTimeout(250);
+  await page.locator('#stopBtn').evaluate(button => {
+    if (!button.hidden) button.click();
+  });
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toBeEnabled();
 }
 async function pickup(page, square) {

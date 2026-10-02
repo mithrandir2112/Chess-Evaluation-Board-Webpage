@@ -253,6 +253,20 @@ button:disabled {
   color: var(--accent-strong);
 }
 
+#flipBoardBtn {
+  width: auto;
+  min-width: 120px;
+  min-height: 42px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .app {
   height: 100vh;
   height: 100dvh;
@@ -414,8 +428,8 @@ textarea:focus {
   .appearance-bar {
     min-height: 63px;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: 54px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
     align-items: end;
     column-gap: 8px;
   }
@@ -431,8 +445,8 @@ textarea:focus {
 
   .appearance-bar .appearance-controls {
     width: 100%;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
+    justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 4px;
   }
 
@@ -1344,7 +1358,7 @@ textarea:focus {
     max-width: none;
   }
 
-  .appearance-controls > .icon-button {
+  .appearance-controls > #flipBoardBtn {
     width: 100%;
   }
 

@@ -32,7 +32,7 @@ If your browser prefers IPv4, use `http://127.0.0.1:5173`.
 - Stop a long-running search while retaining the latest completed depth.
 - View the Stockfish score, search depth, best move, and principal variation.
 - Render the suggested move as an arrow on the board.
-- Flip the board and label the players on their current sides.
+- Flip the board with a labeled ⇅ Flip Board button on desktop and mobile, and label the players on their current sides.
 - Select board themes, piece styles, piece colors, and light or dark interface mode.
 - Use Detroit Lions, Tigers, Red Wings, and Pistons-inspired boards, plus Walnut, Midnight, and maximum-contrast themes.
 - Choose CC0 SVG Vector or Bold Broadcast pieces in addition to the original font-based sets.
