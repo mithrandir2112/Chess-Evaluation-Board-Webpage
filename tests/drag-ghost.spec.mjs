@@ -11,6 +11,7 @@ async function start(page, style) {
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.getByRole('combobox', { name: 'Piece style', exact: true }).selectOption(style);
   await pauseAnalysis(page);
+  await page.evaluate(() => document.fonts.ready);
 }
 async function pauseAnalysis(page) {
   // Allow the app's 180ms automatic-analysis debounce to fire. A fast engine
@@ -28,7 +29,8 @@ async function pickup(page, square) {
   const fontSize = await source.evaluate(node => getComputedStyle(node).fontSize);
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();
-  const pointer = { x: point.x + 8, y: point.y - 8 };
+  // Integer coordinates avoid Linux WebKit rounding fractional mouse positions.
+  const pointer = { x: Math.round(point.x + 8), y: Math.round(point.y - 8) };
   await page.mouse.move(pointer.x, pointer.y, { steps: 3 });
   const ghost = page.locator('.drag-ghost');
   await expect(ghost).toBeVisible();
@@ -52,6 +54,26 @@ for (const width of [1440, 390]) {
     test(`${style} drag keeps its size and pointer alignment at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
       await start(page, style);
+      // Every piece type must retain the same dimensions for both armies,
+      // independent of palette (including Michigan from the reported defect).
+      for (const palette of ['black-white', 'ivory-charcoal', 'high-contrast', 'steel-charcoal', 'michigan-pieces']) {
+        await page.getByRole('combobox', { name: 'Piece colors', exact: true }).selectOption(palette);
+        for (const file of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+          for (const [whiteRank, blackRank] of [['1', '8'], ['2', '7']]) {
+            const white = await piece(page, file + whiteRank).boundingBox();
+            const black = await piece(page, file + blackRank).boundingBox();
+            expect(Math.abs(white.width - black.width)).toBeLessThanOrEqual(1);
+            expect(Math.abs(white.height - black.height)).toBeLessThanOrEqual(1);
+          }
+        }
+      }
+      if (!['vector', 'broadcast'].includes(style)) {
+        expect(await page.evaluate(async () => (await document.fonts.load('32px "Chess Symbols"', '♟')).length)).toBe(1);
+      }
+      const pawnBox = await piece(page, 'e2').boundingBox();
+      const kingBox = await piece(page, 'e1').boundingBox();
+      expect(pawnBox.height).toBeLessThan(kingBox.height * 0.85);
+      await page.locator('#board').screenshot({ path: testInfo.outputPath(`${style}-board.png`) });
       await pickup(page, 'e2');
       if (style === 'vector') await page.screenshot({ path: testInfo.outputPath('vector-drag.png') });
       await drop(page, 'e4');

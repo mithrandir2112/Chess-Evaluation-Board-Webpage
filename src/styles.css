@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Chess Symbols";
+  src: url("../public/fonts/noto-sans-symbols-2/chess-symbols.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   color-scheme: light;
   --bg: #f3f5f8;
@@ -800,15 +808,26 @@ textarea:focus {
 
 .piece {
   position: relative;
+  font-family: "Chess Symbols", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-synthesis: none;
+  font-variant-emoji: text;
   z-index: 2;
-  font-size: clamp(28px, 7vh, 68px);
-  font-size: clamp(28px, 86cqh, 72px);
+  font-size: calc(clamp(28px, 7vh, 68px) * var(--piece-scale, 1));
+  font-size: calc(clamp(28px, 86cqh, 72px) * var(--piece-scale, 1));
   line-height: 1;
   cursor: grab;
   touch-action: none;
   user-select: none;
   filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.18));
 }
+
+/* Shared proportions keep both armies identical and pawns below royalty. */
+.piece[data-piece="p"] { --piece-scale: 0.76; }
+.piece[data-piece="r"] { --piece-scale: 0.88; }
+.piece[data-piece="n"] { --piece-scale: 0.92; }
+.piece[data-piece="b"] { --piece-scale: 0.94; }
 
 .piece[data-color="w"] {
   color: var(--white-piece);
@@ -822,12 +841,22 @@ textarea:focus {
 
 :root[data-piece-style="vector"] .piece,
 :root[data-piece-style="broadcast"] .piece {
-  width: 86%;
-  height: 86%;
-  background: var(--piece-fill);
+  width: calc(86% * var(--piece-scale, 1));
+  height: calc(86% * var(--piece-scale, 1));
   color: transparent;
   font-size: 0;
   filter: drop-shadow(1px 0 0 var(--piece-outline)) drop-shadow(-1px 0 0 var(--piece-outline)) drop-shadow(0 1px 0 var(--piece-outline)) drop-shadow(0 -1px 0 var(--piece-outline));
+}
+
+/* Mask the child, then outline its parent so the mask cannot clip the outline. */
+:root[data-piece-style="vector"] .piece::before,
+:root[data-piece-style="broadcast"] .piece::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--piece-fill);
+  -webkit-mask-image: var(--piece-image);
+  mask-image: var(--piece-image);
   -webkit-mask-position: center;
   mask-position: center;
   -webkit-mask-repeat: no-repeat;
@@ -849,59 +878,51 @@ textarea:focus {
 }
 
 :root[data-piece-style="broadcast"] .piece {
-  width: 91%;
-  height: 91%;
+  width: calc(91% * var(--piece-scale, 1));
+  height: calc(91% * var(--piece-scale, 1));
   filter: drop-shadow(1.5px 0 0 var(--piece-outline)) drop-shadow(-1.5px 0 0 var(--piece-outline)) drop-shadow(0 1.5px 0 var(--piece-outline)) drop-shadow(0 -1.5px 0 var(--piece-outline)) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="p"],
 :root[data-piece-style="broadcast"] .piece[data-piece="p"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/pawn.svg");
-  mask-image: url("../public/pieces/cc0-vector/pawn.svg");
+  --piece-image: url("../public/pieces/cc0-vector/pawn.svg");
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="r"],
 :root[data-piece-style="broadcast"] .piece[data-piece="r"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/rok.svg");
-  mask-image: url("../public/pieces/cc0-vector/rok.svg");
+  --piece-image: url("../public/pieces/cc0-vector/rok.svg");
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="n"],
 :root[data-piece-style="broadcast"] .piece[data-piece="n"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/knight_3.svg");
-  mask-image: url("../public/pieces/cc0-vector/knight_3.svg");
+  --piece-image: url("../public/pieces/cc0-vector/knight_3.svg");
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="b"],
 :root[data-piece-style="broadcast"] .piece[data-piece="b"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/bishop_0.svg");
-  mask-image: url("../public/pieces/cc0-vector/bishop_0.svg");
+  --piece-image: url("../public/pieces/cc0-vector/bishop_0.svg");
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="q"],
 :root[data-piece-style="broadcast"] .piece[data-piece="q"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/queen.svg");
-  mask-image: url("../public/pieces/cc0-vector/queen.svg");
+  --piece-image: url("../public/pieces/cc0-vector/queen.svg");
 }
 
 :root[data-piece-style="vector"] .piece[data-piece="k"],
 :root[data-piece-style="broadcast"] .piece[data-piece="k"] {
-  -webkit-mask-image: url("../public/pieces/cc0-vector/king_1.svg");
-  mask-image: url("../public/pieces/cc0-vector/king_1.svg");
+  --piece-image: url("../public/pieces/cc0-vector/king_1.svg");
 }
 
 :root[data-piece-style="modern"] .piece {
-  font-family: "Arial Unicode MS", "Noto Sans Symbols 2", sans-serif;
-  font-size: clamp(27px, 6.6vh, 64px);
-  font-size: clamp(27px, 86cqh, 70px);
+  font-size: calc(clamp(27px, 6.6vh, 64px) * var(--piece-scale, 1));
+  font-size: calc(clamp(27px, 86cqh, 70px) * var(--piece-scale, 1));
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.34));
   transform: scaleX(0.94);
 }
 
 :root[data-piece-style="minimal"] .piece {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(26px, 6.4vh, 62px);
-  font-size: clamp(26px, 83cqh, 68px);
+  font-size: calc(clamp(26px, 6.4vh, 62px) * var(--piece-scale, 1));
+  font-size: calc(clamp(26px, 83cqh, 68px) * var(--piece-scale, 1));
   filter: none;
   opacity: 0.9;
 }

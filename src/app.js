@@ -1,16 +1,18 @@
 const PIECES = {
-  K: "♔",
-  Q: "♕",
-  R: "♖",
-  B: "♗",
-  N: "♘",
-  P: "♙",
-  k: "♚",
-  q: "♛",
-  r: "♜",
-  b: "♝",
-  n: "♞",
-  p: "♟"
+  // Both armies share the same silhouettes; the palette supplies their colors.
+  // Text presentation prevents the black pawn from becoming a platform emoji.
+  K: "♚\uFE0E",
+  Q: "♛\uFE0E",
+  R: "♜\uFE0E",
+  B: "♝\uFE0E",
+  N: "♞\uFE0E",
+  P: "♟\uFE0E",
+  k: "♚\uFE0E",
+  q: "♛\uFE0E",
+  r: "♜\uFE0E",
+  b: "♝\uFE0E",
+  n: "♞\uFE0E",
+  p: "♟\uFE0E"
 };
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

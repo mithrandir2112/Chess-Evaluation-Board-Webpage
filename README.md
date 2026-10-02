@@ -35,7 +35,7 @@ If your browser prefers IPv4, use `http://127.0.0.1:5173`.
 - Flip the board with a labeled ⇅ Flip Board button on desktop and mobile, and label the players on their current sides.
 - Select board themes, piece styles, piece colors, and light or dark interface mode.
 - Use Detroit Lions, Tigers, Red Wings, and Pistons-inspired boards, plus Walnut, Midnight, and maximum-contrast themes.
-- Choose CC0 SVG Vector or Bold Broadcast pieces in addition to the original font-based sets.
+- Choose Classic, Modern, or Minimal using a bundled chess font, or the CC0 SVG Vector and Bold Broadcast sets.
 
 ## Stockfish Engine
 
@@ -57,6 +57,8 @@ Clicking a piece belonging to the side to move highlights its legal destinations
 
 Dragging uses one pointer-capture path across mouse and touch input. A five-pixel threshold separates a click from a drag, window-level cleanup prevents stranded drag images, and a 15% boundary tolerance snaps near-edge drops only when the nearby destination is legal.
 
+Both armies use matching silhouettes and per-piece proportions, with smaller pawns and larger kings/queens. Classic, Modern, and Minimal use a bundled six-glyph font with explicit text presentation, avoiding device-specific font or emoji substitutions. Vector and Bold Broadcast apply their outlines outside the SVG mask so the outlines remain visible.
+
 The drag representation preserves the source piece's size, font size, and transform from pointer-down. Vector and Bold Broadcast pieces keep their square-sized masks when dragged outside the board; font-based pieces retain their container-relative sizing.
 
 ### Browser regression checks
@@ -67,11 +69,13 @@ npx playwright install chromium webkit
 npm run test:browser
 ```
 
-On Linux, use `npx playwright install --with-deps chromium webkit`. The tests cover all five piece styles at desktop and phone widths, pointer-centered sizing, both colors, legal moves, illegal drops, captures, board flipping, history navigation, and cancellation. Searches are stopped through the UI while measuring geometry. Phone-width mouse tests do not replace a physical touchscreen check.
+On Linux, use `npx playwright install --with-deps chromium webkit`. The tests compare every white/black piece pair across all five styles and all five palettes at desktop and phone widths, confirm the bundled font loads and pawns stay smaller than kings, and cover pointer-centered sizing, both colors, legal moves, illegal drops, captures, board flipping, history navigation, and cancellation. Searches are stopped through the UI while measuring geometry. Phone-width mouse tests do not replace a physical touchscreen check.
 
 ## Piece Artwork
 
 The Vector and Bold Broadcast styles use the CC0 chess SVG set by femrek from OpenGameArt. The source and public-domain dedication are documented in `public/pieces/cc0-vector/LICENSE.md`.
+
+Classic, Modern, and Minimal use Chess Symbols, a 4.6 KB subset derived from Noto Sans Symbols 2 under the SIL Open Font License. Source, modifications, and license are in `public/fonts/noto-sans-symbols-2/`. The font is served locally with the app.
 
 ## Deployment
 
