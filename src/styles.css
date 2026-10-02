@@ -255,6 +255,7 @@ button:disabled {
 
 #flipBoardBtn {
   width: auto;
+  margin-inline-start: auto;
   min-width: 120px;
   min-height: 42px;
   padding: 0 12px;
@@ -518,6 +519,7 @@ textarea:focus {
 
 .appearance-controls {
   display: flex;
+  width: 100%;
   align-items: end;
   justify-content: flex-end;
   gap: 6px;
@@ -1364,6 +1366,7 @@ textarea:focus {
 
   .theme-toggle {
     grid-column: 1 / -1;
+    justify-self: end;
     justify-content: center;
   }
 
