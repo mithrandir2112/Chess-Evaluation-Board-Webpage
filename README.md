@@ -57,6 +57,18 @@ Clicking a piece belonging to the side to move highlights its legal destinations
 
 Dragging uses one pointer-capture path across mouse and touch input. A five-pixel threshold separates a click from a drag, window-level cleanup prevents stranded drag images, and a 15% boundary tolerance snaps near-edge drops only when the nearby destination is legal.
 
+The drag representation preserves the source piece's size, font size, and transform from pointer-down. Vector and Bold Broadcast pieces keep their square-sized masks when dragged outside the board; font-based pieces retain their container-relative sizing.
+
+### Browser regression checks
+
+```sh
+npm ci
+npx playwright install chromium webkit
+npm run test:browser
+```
+
+On Linux, use `npx playwright install --with-deps chromium webkit`. The tests cover all five piece styles at desktop and phone widths, pointer-centered sizing, both colors, legal moves, illegal drops, captures, board flipping, history navigation, and cancellation. Searches are stopped through the UI while measuring geometry. Phone-width mouse tests do not replace a physical touchscreen check.
+
 ## Piece Artwork
 
 The Vector and Bold Broadcast styles use the CC0 chess SVG set by femrek from OpenGameArt. The source and public-domain dedication are documented in `public/pieces/cc0-vector/LICENSE.md`.
