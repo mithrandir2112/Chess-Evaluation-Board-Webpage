@@ -1,0 +1,26 @@
+name: Chess browser regression tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: chess-browser-failures
+          path: test-results/
+          retention-days: 7

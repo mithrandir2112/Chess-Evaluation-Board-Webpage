@@ -1,16 +1,18 @@
 const PIECES = {
-  K: "♔",
-  Q: "♕",
-  R: "♖",
-  B: "♗",
-  N: "♘",
-  P: "♙",
-  k: "♚",
-  q: "♛",
-  r: "♜",
-  b: "♝",
-  n: "♞",
-  p: "♟"
+  // Both armies share the same silhouettes; the palette supplies their colors.
+  // Text presentation prevents the black pawn from becoming a platform emoji.
+  K: "♚\uFE0E",
+  Q: "♛\uFE0E",
+  R: "♜\uFE0E",
+  B: "♝\uFE0E",
+  N: "♞\uFE0E",
+  P: "♟\uFE0E",
+  k: "♚\uFE0E",
+  q: "♛\uFE0E",
+  r: "♜\uFE0E",
+  b: "♝\uFE0E",
+  n: "♞\uFE0E",
+  p: "♟\uFE0E"
 };
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -550,11 +552,21 @@ function handlePointerDragStart(event, from, piece) {
   if (event.button !== 0 || colorOf(piece) !== state.history[state.activePly].game.turn) return;
   event.preventDefault();
   event.currentTarget.setPointerCapture?.(event.pointerId);
+  // Snapshot while the piece still belongs to its square; an engine update
+  // may replace the board nodes before the pointer crosses the drag threshold.
+  const sourceStyle = getComputedStyle(event.currentTarget);
   state.pointerDrag = {
     from,
     piece,
     pointerId: event.pointerId,
     source: event.currentTarget,
+    appearance: {
+      width: sourceStyle.width,
+      height: sourceStyle.height,
+      fontSize: sourceStyle.fontSize,
+      lineHeight: sourceStyle.lineHeight,
+      transform: `translate(-50%, -50%) ${sourceStyle.transform === "none" ? "" : sourceStyle.transform}`
+    },
     ghost: null,
     moved: false,
     startX: event.clientX,
@@ -580,6 +592,10 @@ function handlePointerDragMove(event) {
     ghost.dataset.color = colorOf(drag.piece);
     ghost.dataset.piece = drag.piece.toLowerCase();
     ghost.textContent = PIECES[drag.piece];
+    // Resolve square-relative percentages and container-query font sizes before
+    // moving the representation to body. Keep the untransformed box so styles
+    // such as Modern's horizontal scale are applied exactly once.
+    Object.assign(ghost.style, drag.appearance);
     document.body.append(ghost);
     drag.ghost = ghost;
     drag.moved = true;
