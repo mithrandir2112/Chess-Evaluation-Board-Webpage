@@ -4,14 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chess Position Analyzer</title>
-    <script>
-      try {
-        document.documentElement.dataset.theme = localStorage.getItem("chess-ui-theme") || "light";
-      } catch (_) {
-        document.documentElement.dataset.theme = "light";
-      }
-    </script>
-    <link rel="stylesheet" href="./src/styles.css?v=17" />
+    <script src="./src/theme.js?v=1"></script>
+    <link rel="stylesheet" href="./src/styles.css?v=18" />
   </head>
   <body>
     <main class="app">
@@ -209,6 +203,6 @@
 
     <script defer src="./src/stockfish-engine.js?v=1"></script>
     <script defer src="./src/captured-material.js?v=1"></script>
-    <script defer src="./src/app.js?v=12"></script>
+    <script defer src="./src/app.js?v=13"></script>
   </body>
 </html>

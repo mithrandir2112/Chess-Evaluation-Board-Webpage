@@ -139,7 +139,7 @@ els.stopBtn.addEventListener("click", stopAnalysis);
 els.depthSelect.addEventListener("change", handleDepthSelection);
 els.customDepthInput.addEventListener("input", handleCustomDepthInput);
 els.customDepthInput.addEventListener("change", handleCustomDepthChange);
-els.themeToggle.addEventListener("click", toggleTheme);
+els.themeToggle?.addEventListener("click", toggleTheme);
 els.flipBoardBtn.addEventListener("click", flipBoard);
 els.boardThemeSelect.addEventListener("change", (event) => setBoardTheme(event.target.value));
 els.pieceStyleSelect.addEventListener("change", (event) => setPieceStyle(event.target.value));
@@ -1626,8 +1626,7 @@ function savePreference(key, value) {
 }
 
 function applyPreferences() {
-  const theme = document.documentElement.dataset.theme || "light";
-  setInterfaceTheme(theme);
+  window.ChessTheme.syncControl();
   setBoardTheme(state.boardTheme);
   setPieceStyle(state.pieceStyle);
   setPiecePalette(state.piecePalette);
@@ -1635,14 +1634,7 @@ function applyPreferences() {
 }
 
 function toggleTheme() {
-  setInterfaceTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-}
-
-function setInterfaceTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  els.themeToggle.setAttribute("aria-checked", String(theme === "dark"));
-  els.themeLabel.textContent = theme === "dark" ? "Light" : "Dark";
-  savePreference("chess-ui-theme", theme);
+  window.ChessTheme.toggle();
 }
 
 function flipBoard() {
