@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css?v=12" />
+    <link rel="stylesheet" href="./src/styles.css?v=17" />
   </head>
   <body>
     <main class="app">
@@ -21,14 +21,10 @@
             <div class="brand-lockup">
               <span class="brand-mark" aria-hidden="true">♞</span>
               <div>
-                <span class="eyebrow">Analysis workspace</span>
               <h1>Chess Analyzer</h1>
               <p>Load a game or position, then explore the engine's best move.</p>
               </div>
             </div>
-            <button id="sampleBtn" class="icon-button" title="Load sample PGN" aria-label="Load sample PGN">
-              <span aria-hidden="true">↺</span>
-            </button>
           </div>
 
           <label class="field">
@@ -39,6 +35,7 @@
           <div class="actions">
             <button id="parseBtn" class="primary">Load &amp; Analyze</button>
             <button id="clearBtn">Clear</button>
+            <button id="sampleBtn" title="Load sample PGN" aria-label="Load sample PGN">Load Sample</button>
           </div>
 
           <div id="status" class="status" role="status">Ready for PGN or FEN notation.</div>
@@ -119,12 +116,14 @@
                   <span class="turn-indicator" aria-hidden="true"></span>
                   <strong id="topPlayerName">Player 2</strong>
                   <span id="topPlayerColor">Black</span>
+                  <div id="topCaptures" class="captured-pieces" role="img"></div>
                 </div>
                 <div id="board" class="board" aria-label="Chessboard"></div>
                 <div id="bottomPlayer" class="player-label" aria-label="Bottom player">
                   <span class="turn-indicator" aria-hidden="true"></span>
                   <strong id="bottomPlayerName">Player 1</strong>
                   <span id="bottomPlayerColor">White</span>
+                  <div id="bottomCaptures" class="captured-pieces" role="img"></div>
                 </div>
               </div>
             </div>
@@ -133,8 +132,8 @@
 
         <aside class="panel analysis-panel">
           <div class="analysis-heading">
-            <span class="eyebrow">Current position</span>
             <strong>Analysis</strong>
+            <span class="eyebrow">Current position</span>
           </div>
 
           <div class="analysis">
@@ -163,10 +162,7 @@
 
           <section class="candidate-panel" aria-labelledby="candidateTitle">
             <div class="candidate-header">
-              <div>
-                <span class="eyebrow">Engine analysis</span>
-                <h2 id="candidateTitle">Stockfish Candidates</h2>
-              </div>
+              <h2 id="candidateTitle">Stockfish Settings</h2>
               <div class="engine-controls">
                 <label class="select-control">
                   <span>Depth</span>
@@ -182,13 +178,14 @@
                   <input id="customDepthInput" type="number" min="6" max="30" value="22" aria-label="Custom analysis depth" />
                 </label>
                 <button id="analyzeBtn" class="primary">Analyze</button>
-                <button id="stopBtn" class="icon-button stop-button" title="Stop analysis" aria-label="Stop analysis" hidden>
-                  <span aria-hidden="true">■</span>
-                </button>
+
               </div>
             </div>
             <div class="analysis-progress">
               <span id="analysisProgress">Ready</span>
+                <button id="stopBtn" class="icon-button stop-button" title="Stop analysis" aria-label="Stop analysis" hidden>
+                  <span aria-hidden="true">■</span>
+                </button>
               <span id="depthWarning" class="depth-warning" hidden>High depths may take several minutes.</span>
             </div>
             <div id="candidateList" class="candidate-list" aria-live="polite"></div>
@@ -199,6 +196,11 @@
               <h2>Game Moves</h2>
               <span id="moveCount">Move 0 of 0</span>
             </div>
+            <div class="pgn-export-actions">
+              <button id="copyPgnBtn" type="button">Copy PGN</button>
+              <button id="downloadPgnBtn" type="button">Download PGN</button>
+              <span id="pgnExportStatus" role="status"></span>
+            </div>
             <div id="moveList" class="move-list" aria-label="Move list"></div>
           </div>
         </aside>
@@ -206,6 +208,7 @@
     </main>
 
     <script defer src="./src/stockfish-engine.js?v=1"></script>
-    <script defer src="./src/app.js?v=8"></script>
+    <script defer src="./src/captured-material.js?v=1"></script>
+    <script defer src="./src/app.js?v=12"></script>
   </body>
 </html>

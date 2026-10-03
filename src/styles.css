@@ -653,7 +653,7 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.player-label > span:last-child {
+.player-label > span[id$="PlayerColor"] {
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1414,3 +1414,71 @@ textarea:focus {
     font-size: 9px;
   }
 }
+
+/* Compact capture rows stay with their player when the board flips. */
+.captured-pieces { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 23px; margin-top: -5px; }
+.capture-group { display: inline-flex; }
+.captured-piece { font-family: "Chess Symbols", serif; font-size: 20px; line-height: 23px; }
+.captured-piece + .captured-piece { margin-left: -7px; }
+.captured-piece.white { color: var(--white-piece); -webkit-text-stroke: .6px var(--white-piece-outline); }
+.captured-piece.black { color: var(--black-piece); -webkit-text-stroke: .6px var(--black-piece-outline); }
+.capture-note { font-size: 10px; color: var(--muted); }
+
+.pgn-export-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; align-items: center; }
+.pgn-export-actions button { min-height: 44px; }
+#pgnExportStatus { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+#pgnExportStatus:empty { display: none; }
+
+/* Give game actions a clear theme accent and keep primary controls on the right. */
+.pgn-export-actions button {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: var(--panel);
+  font-weight: 700;
+}
+:root[data-theme="dark"] .pgn-export-actions button { background: var(--soft); }
+.pgn-export-actions button:hover { background: var(--soft); border-color: var(--accent-strong); }
+#downloadPgnBtn { margin-left: auto; }
+#analyzeBtn { margin-left: auto; min-height: 44px; }
+.engine-controls .select-control select,
+.engine-controls .select-control input { min-height: 44px; padding: 8px 12px; font-size: 14px; }
+.engine-controls .select-control select { min-width: 145px; }
+.engine-controls .select-control select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 44px;
+  padding-right: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 16px) 19px, calc(100% - 11px) 19px;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* Stable candidate slots keep analysis and move-history cards from jumping. */
+.candidate-list { position: relative; grid-template-rows: repeat(3, 62px); }
+.candidate-list .candidate-empty { position: absolute; inset: 0; z-index: 1; }
+.candidate-list .candidate-empty[hidden] { display: none; }
+.actions { flex-wrap: wrap; }
+.actions #sampleBtn { flex-basis: 100%; }
+@media (min-width: 1101px) {
+  .appearance-bar .move-controls { gap: 8px; }
+  .appearance-bar .move-controls .icon-button { width: 44px; min-height: 44px; font-size: 20px; }
+  .appearance-bar .position-label { min-width: 120px; max-width: none; font-size: 14px; }
+  .appearance-bar .appearance-controls { gap: 14px; }
+  .appearance-bar .select-control { gap: 6px; }
+  .appearance-bar .select-control > span { font-size: 12px; }
+  .appearance-bar .select-control select {
+    appearance: none; -webkit-appearance: none; height: 44px; min-height: 44px;
+    font-size: 15px; min-width: 160px; padding: 8px 32px 8px 12px;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 16px) 19px, calc(100% - 11px) 19px;
+    background-size: 5px 5px; background-repeat: no-repeat;
+  }
+}
+/* Reserve two lines for changing engine/evaluation text. */
+.metric strong { min-height: 2.5em; }
+
+/* Stop belongs in the progress row so it never displaces Analyze. */
+.analysis-progress { min-height: 60px; }
+.analysis-progress .stop-button { margin-left: auto; min-height: 42px; flex-shrink: 0; }
+#analyzeBtn:disabled { opacity: 1; cursor: wait; }

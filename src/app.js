@@ -49,6 +49,7 @@ const state = {
   selectedSquare: null,
   players: { white: "Player 1", black: "Player 2" },
   inputFormat: "pgn",
+  pgnHeaders: {},
   orientation: readPreference("chess-board-orientation", "white"),
   boardTheme: readPreference("chess-board-theme", "ice-blue"),
   pieceStyle: readPreference("chess-piece-style", "classic"),
@@ -120,9 +121,11 @@ let automaticAnalysisTimer = null;
 applyPreferences();
 updateDepthControls();
 
-els.pgnInput.value = SAMPLE_PGN;
+els.pgnInput.value = "";
 els.parseBtn.addEventListener("click", parseNotationFromInput);
 els.clearBtn.addEventListener("click", clearApp);
+document.querySelector("#copyPgnBtn").addEventListener("click", copyGamePgn);
+document.querySelector("#downloadPgnBtn").addEventListener("click", downloadGamePgn);
 els.sampleBtn.addEventListener("click", () => {
   els.pgnInput.value = SAMPLE_PGN;
   parseNotationFromInput();
@@ -146,7 +149,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 setupResponsiveBoard();
-parseNotationFromInput();
+clearApp();
 
 function setupResponsiveBoard() {
   const desktopLayout = window.matchMedia("(min-width: 1101px)");
@@ -244,9 +247,9 @@ function parseNotationFromInput() {
 
 function loadPgn(pgn) {
     const tokens = tokenizePgn(pgn);
-    if (!tokens.length) throw new Error("The PGN does not contain any moves.");
+    if (!tokens.length && !/\[Result\s|(?:^|\s)\*(?:\s|$)/.test(pgn)) throw new Error("The PGN does not contain any moves.");
     const headers = parsePgnHeaders(pgn);
-    const game = createGame();
+    const game = headers.SetUp === "1" && headers.FEN ? gameFromFen(headers.FEN) : createGame();
     const history = [{ game: cloneGame(game), san: "Start", move: null }];
 
     for (const token of tokens) {
@@ -256,6 +259,7 @@ function loadPgn(pgn) {
       history.push({ game: cloneGame(game), san: token, move });
     }
 
+    state.pgnHeaders = headers;
     state.game = game;
     state.history = history;
     state.activePly = history.length - 1;
@@ -265,7 +269,7 @@ function loadPgn(pgn) {
       white: playerName(headers.White, "Player 1", "White"),
       black: playerName(headers.Black, "Player 2", "Black")
     };
-    state.inputFormat = "pgn";
+    state.inputFormat = headers.SetUp === "1" && headers.FEN ? "fen-pgn" : "pgn";
     const loadedMessage = `PGN loaded: ${tokens.length} moves.`;
     setStatus(loadedMessage);
     render();
@@ -281,6 +285,7 @@ function loadFen(fen) {
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "fen";
+  state.pgnHeaders = {};
   const loadedMessage = `FEN position loaded. ${game.turn === "w" ? "White" : "Black"} to move.`;
   setStatus(loadedMessage);
   render();
@@ -320,8 +325,8 @@ function normalizeFen(fen) {
 
 function parsePgnHeaders(pgn) {
   const headers = {};
-  for (const match of pgn.matchAll(/^\s*\[([A-Za-z0-9_]+)\s+"([^"]*)"\]\s*$/gm)) {
-    headers[match[1]] = match[2].trim();
+  for (const match of pgn.matchAll(/^\s*\[([A-Za-z0-9_]+)\s+"((?:\\.|[^"\\])*)"\]\s*$/gm)) {
+    headers[match[1]] = match[2].replace(/\\(["\\])/g, "$1").trim();
   }
   return headers;
 }
@@ -353,22 +358,30 @@ function setActivePly(ply) {
 }
 
 function clearApp() {
+  clearTimeout(automaticAnalysisTimer);
+  automaticAnalysisTimer = null;
+  finishPointerDrag();
   state.analysisId += 1;
   state.analyzing = false;
   state.engineStatus = "idle";
   state.selectedSquare = null;
   stockfishEngine.cancel().catch(() => {});
   els.pgnInput.value = "";
-  state.history = [{ game: createGame(), san: "Start", move: null }];
+  state.game = createGame();
+  state.history = [{ game: cloneGame(state.game), san: "Start", move: null }];
   state.activePly = 0;
   clearAnalysisResult();
+  state.analysisPending = false;
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "pgn";
-  setStatus("Ready for PGN or FEN notation.");
+  state.pgnHeaders = {};
+  document.querySelector("#pgnExportStatus").textContent = "";
+  setStatus("New game ready. White to move. Load PGN or FEN to analyze another position.");
   render();
 }
 
 function clearAnalysisResult() {
+  state.analysisPending = true;
   state.bestMove = null;
   state.engineScore = null;
   state.engineDepth = 0;
@@ -378,12 +391,26 @@ function clearAnalysisResult() {
 function render() {
   const current = state.history[state.activePly]?.game || createGame();
   renderBoard(current);
-  renderEvaluationBar(current);
   renderPlayerLabels(current);
   renderMoveList();
-  renderAnalysis(current);
+  renderAnalysisRegion(current);
+}
+
+// Engine messages update values and the arrow, never the board or move history.
+function renderAnalysisRegion(game = state.history[state.activePly].game) {
+  renderEvaluationBar(game);
+  renderAnalysis(game);
   renderCandidates();
   updateControls();
+  const key = JSON.stringify([state.orientation, state.bestMove?.from, state.bestMove?.to]);
+  if (els.board.dataset.arrowKey !== key) {
+    els.board.querySelector(".arrow-layer")?.replaceWith(createArrowLayer(state.bestMove));
+    for (const square of els.board.querySelectorAll(".square")) {
+      square.classList.toggle("from", square.dataset.square === state.bestMove?.from);
+      square.classList.toggle("to", square.dataset.square === state.bestMove?.to);
+    }
+    els.board.dataset.arrowKey = key;
+  }
 }
 
 function renderPlayerLabels(game) {
@@ -391,6 +418,8 @@ function renderPlayerLabels(game) {
   const bottomColor = topColor === "white" ? "black" : "white";
   setPlayerLabel("top", topColor, game.turn);
   setPlayerLabel("bottom", bottomColor, game.turn);
+  renderCapturedPieces("top", topColor);
+  renderCapturedPieces("bottom", bottomColor);
 }
 
 function setPlayerLabel(side, color, turn) {
@@ -404,7 +433,42 @@ function setPlayerLabel(side, color, turn) {
   label.setAttribute("aria-label", `${state.players[color]}, ${color}${turn === shortColor ? ", to move" : ""}`);
 }
 
+function renderCapturedPieces(side, color) {
+  const row = document.querySelector(`#${side}Captures`);
+  row.replaceChildren();
+  const inferred = state.inputFormat.startsWith("fen");
+  const captured = window.CapturedMaterial.atPly(state.history, state.activePly, inferred)[color === "white" ? "w" : "b"];
+  const names = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen" };
+  const descriptions = [];
+  for (const role of ["p", "n", "b", "r", "q"]) {
+    const count = captured.filter(piece => piece.toLowerCase() === role).length;
+    if (!count) continue;
+    descriptions.push(`${count} ${names[role]}${count === 1 ? "" : "s"}`);
+    const group = document.createElement("span");
+    group.className = "capture-group";
+    group.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < count; i++) {
+      const icon = document.createElement("span");
+      icon.className = `captured-piece ${color === "white" ? "black" : "white"}`;
+      icon.textContent = PIECES[role];
+      group.append(icon);
+    }
+    row.append(group);
+  }
+  const description = `Captured by ${color}: ${descriptions.join(", ") || "none"}. ${inferred ? "Inferred from FEN; promotions can make the original captures uncertain." : "Recorded moves."}`;
+  row.setAttribute("aria-label", description);
+  row.title = description;
+  const note = document.createElement("span");
+  note.className = "capture-note";
+  note.textContent = inferred ? "Inferred from FEN" : captured.length ? "" : "No captures";
+  row.append(note);
+}
+
 function renderBoard(game) {
+  const key = JSON.stringify([gameToFen(game), state.orientation, state.selectedSquare]);
+  if (els.board.dataset.positionKey === key) return;
+  els.board.dataset.positionKey = key;
+  delete els.board.dataset.arrowKey;
   els.board.innerHTML = "";
   const arrow = createArrowLayer(state.bestMove);
   const selectedMoves = state.selectedSquare
@@ -501,23 +565,91 @@ function createArrowLayer(move) {
   return svg;
 }
 
+function exportGamePgn() {
+  const initial = state.history[0].game;
+  const headers = {
+    Event: state.pgnHeaders.Event || "Casual game",
+    Site: state.pgnHeaders.Site || "?",
+    Date: state.pgnHeaders.Date || "????.??.??",
+    Round: state.pgnHeaders.Round || "?",
+    White: state.pgnHeaders.White || state.players.white,
+    Black: state.pgnHeaders.Black || state.players.black,
+    Result: ["1-0", "0-1", "1/2-1/2"].includes(state.pgnHeaders.Result) ? state.pgnHeaders.Result : "*"
+  };
+  const fen = gameToFen(initial);
+  if (fen !== START_FEN) Object.assign(headers, { SetUp: "1", FEN: fen });
+  const escapeTag = value => Array.from(String(value), char => [34, 92].includes(char.charCodeAt(0)) ? String.fromCharCode(92) + char : char.charCodeAt(0) < 32 ? " " : char).join("");
+  const tags = Object.entries(headers).map(([key, value]) => `[${key} "${escapeTag(value)}"]`).join("\n");
+  const moves = [];
+  for (let i = 1; i < state.history.length; i++) {
+    const before = state.history[i - 1].game;
+    if (before.turn === "w") moves.push(`${before.fullmove}.`);
+    else if (i === 1) moves.push(`${before.fullmove}...`);
+    moves.push(moveToSan(before, state.history[i].move));
+  }
+  moves.push(headers.Result);
+  return `${tags}\n\n${moves.join(" ")}\n`;
+}
+
+async function copyGamePgn() {
+  const status = document.querySelector("#pgnExportStatus");
+  try {
+    await navigator.clipboard.writeText(exportGamePgn());
+    status.textContent = "PGN copied.";
+  } catch (_) {
+    status.textContent = "Clipboard unavailable. Use Download PGN to save the game.";
+  }
+}
+
+function downloadGamePgn() {
+  const blob = new Blob([exportGamePgn()], { type: "application/x-chess-pgn;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "chess-game.pgn";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  document.querySelector("#pgnExportStatus").textContent = "PGN download started.";
+}
+
 function renderMoveList() {
-  els.moveList.innerHTML = "";
   const moves = state.history.slice(1);
   els.moveCount.textContent = `Move ${state.activePly} of ${moves.length}`;
-
-  for (let i = 0; i < moves.length; i += 2) {
-    const pair = document.createElement("div");
-    pair.className = "move-pair";
-
-    const moveNo = document.createElement("span");
-    moveNo.className = "move-number";
-    moveNo.textContent = `${i / 2 + 1}.`;
-    pair.append(moveNo);
-
-    pair.append(createMoveButton(moves[i], i + 1));
-    pair.append(moves[i + 1] ? createMoveButton(moves[i + 1], i + 2) : document.createElement("span"));
-    els.moveList.append(pair);
+  const offset = state.history[0].game.turn === "b" ? 1 : 0;
+  if (els.moveList.dataset.offset !== String(offset)) {
+    els.moveList.replaceChildren();
+    els.moveList.dataset.offset = String(offset);
+  }
+  const count = Math.ceil((moves.length + offset) / 2);
+  // Reuse existing rows/buttons; only append or remove the changed continuation.
+  while (els.moveList.children.length > (moves.length ? count : 0)) els.moveList.lastElementChild.remove();
+  for (let i = 0; i < moves.length; i++) {
+    const rowIndex = Math.floor((i + offset) / 2);
+    let pair = els.moveList.children[rowIndex];
+    if (!pair) {
+      pair = document.createElement("div");
+      pair.className = "move-pair";
+      pair.innerHTML = '<span class="move-number"></span><span></span><span></span>';
+      els.moveList.append(pair);
+    }
+    const before = state.history[i].game;
+    pair.firstElementChild.textContent = `${before.fullmove}${rowIndex === 0 && offset ? "..." : "."}`;
+    const slot = before.turn === "w" ? 1 : 2;
+    let button = pair.children[slot];
+    if (!button.matches("button")) {
+      const replacement = createMoveButton(moves[i], i + 1);
+      button.replaceWith(replacement);
+      button = replacement;
+    }
+    if (button.textContent !== moves[i].san) button.textContent = moves[i].san;
+    button.classList.toggle("active", i + 1 === state.activePly);
+  }
+  // A replacement line can end with White after previously having a Black reply.
+  if (moves.length && (moves.length + offset) % 2) {
+    const last = els.moveList.lastElementChild.children[2];
+    if (last.matches("button")) last.replaceWith(document.createElement("span"));
   }
 }
 
@@ -726,6 +858,7 @@ function playMove(from, to, promotion = "q") {
     ...state.history.slice(0, state.activePly + 1),
     { game: cloneGame(game), san, move }
   ];
+  state.pgnHeaders.Result = "*";
   state.activePly = state.history.length - 1;
   state.selectedSquare = null;
   clearAnalysisResult();
@@ -742,7 +875,7 @@ function renderEvaluationBar(game) {
   els.blackEvalFill.style.height = `${blackPercent}%`;
   els.positionEval.textContent = state.engineScore
     ? formatEngineScore(state.engineScore)
-    : state.analyzing ? "Analyzing..." : "Not analyzed";
+    : state.analyzing || state.analysisPending ? "Analyzing..." : "Not analyzed";
   els.positionEval.style.color = score > 25 ? "var(--accent-strong)" : score < -25 ? "var(--ink)" : "var(--muted)";
   const isFlipped = state.orientation === "black";
   els.evalBar.classList.toggle("flipped", isFlipped);
@@ -767,28 +900,38 @@ function renderAnalysis(game) {
 }
 
 function renderCandidates() {
-  els.candidateList.innerHTML = "";
-
-  if (!state.candidates.length) {
+  if (!els.candidateList.children.length) {
     const empty = document.createElement("div");
     empty.className = "candidate-empty";
-    empty.textContent = state.analyzing ? "Calculating candidate lines..." : "Analyze this position to compare candidate moves.";
     els.candidateList.append(empty);
-    return;
+    for (let index = 0; index < 3; index++) {
+      const row = document.createElement("button");
+      row.className = "candidate-row";
+      row.type = "button";
+      row.innerHTML = `<span class="candidate-rank">${index + 1}</span><strong class="candidate-move"></strong><span class="candidate-score"></span><span class="candidate-pv"></span><span class="candidate-play" aria-hidden="true">▶</span>`;
+      row.addEventListener("click", () => {
+        const candidate = state.candidates[index];
+        if (candidate) playCandidate(candidate);
+      });
+      els.candidateList.append(row);
+    }
   }
-
-  for (const [index, candidate] of state.candidates.entries()) {
-    const row = document.createElement("button");
-    row.className = "candidate-row";
-    row.type = "button";
+  const empty = els.candidateList.firstElementChild;
+  empty.hidden = state.candidates.length > 0;
+  const message = state.analyzing || state.analysisPending ? "Calculating candidate lines..." : "Analyze this position to compare candidate moves.";
+  if (empty.textContent !== message) empty.textContent = message;
+  for (let index = 0; index < 3; index++) {
+    const row = els.candidateList.children[index + 1];
+    const candidate = state.candidates[index];
+    row.style.visibility = candidate ? "visible" : "hidden";
+    row.disabled = !candidate;
+    if (!candidate) continue;
     row.title = `Play ${candidate.san}. ${candidate.pv.join(" ")}`;
     row.setAttribute("aria-label", `Play candidate ${index + 1}: ${candidate.san}`);
-    row.innerHTML = `<span class="candidate-rank">${index + 1}</span><strong class="candidate-move"></strong><span class="candidate-score"></span><span class="candidate-pv"></span><span class="candidate-play" aria-hidden="true">▶</span>`;
-    row.querySelector(".candidate-move").textContent = candidate.san;
-    row.querySelector(".candidate-score").textContent = formatEngineScore(candidate.score);
-    row.querySelector(".candidate-pv").textContent = candidate.pv.join(" ");
-    row.addEventListener("click", () => playCandidate(candidate));
-    els.candidateList.append(row);
+    for (const [selector, value] of [[".candidate-move", candidate.san], [".candidate-score", formatEngineScore(candidate.score)], [".candidate-pv", candidate.pv.join(" ")]]) {
+      const node = row.querySelector(selector);
+      if (node.textContent !== value) node.textContent = value;
+    }
   }
 }
 
@@ -809,7 +952,7 @@ function updateControls() {
         : `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
     : state.engineDepth ? `Completed at depth ${state.engineDepth}` : "Ready";
   els.positionLabel.textContent = state.activePly === 0
-    ? state.inputFormat === "fen" ? "FEN position" : "Start position"
+    ? state.inputFormat.startsWith("fen") ? "FEN position" : "Start position"
     : `After ${state.history[state.activePly].san}`;
 }
 
@@ -825,7 +968,7 @@ async function analyzeCurrentPosition(options = {}) {
   clearAnalysisResult();
   state.engineName = "Stockfish 18 Lite";
   if (!options.automatic) setStatus("Analyzing selected position...");
-  render();
+  renderAnalysisRegion(game);
 
   try {
     const result = await stockfishEngine.analyze(gameToFen(game), {
@@ -842,10 +985,9 @@ async function analyzeCurrentPosition(options = {}) {
         if (info.score) state.engineScore = info.score;
         if (info.depth) state.engineDepth = info.depth;
         state.candidates = stockfishVariationsToMoves(game, info.variations);
-        renderEvaluationBar(game);
-        renderAnalysis(game);
-        renderCandidates();
-        updateControls();
+        const leading = state.candidates[0];
+        state.bestMove = leading ? { ...moveFromUci(game, leading.uci), ...leading } : null;
+        renderAnalysisRegion(game);
       }
     });
 
@@ -856,12 +998,13 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineName = result.engineName || "Stockfish 18 Lite";
     state.candidates = stockfishVariationsToMoves(game, result.variations);
     state.analyzing = false;
+    state.analysisPending = false;
     state.engineStatus = "ready";
     const resultMessage = state.bestMove
       ? `Stockfish depth ${state.engineDepth}: best move ${state.bestMove.san || state.bestMove.uci}.`
       : "No legal moves in this position.";
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage);
-    render();
+    renderAnalysisRegion(game);
   } catch (error) {
     if (error.name === "AbortError" || analysisId !== state.analysisId) return;
 
@@ -871,6 +1014,7 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineDepth = 3;
     state.engineName = "Prototype fallback";
     state.analyzing = false;
+    state.analysisPending = false;
     state.engineStatus = "failed";
     const failure = error.isStockfishEngineError
       ? `Stockfish failed after an automatic retry (${error.message})`
@@ -879,7 +1023,7 @@ async function analyzeCurrentPosition(options = {}) {
       ? `${failure}; prototype fallback suggests ${best.san || best.uci}.`
       : `${failure}; no legal moves were found.`;
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage, true);
-    render();
+    renderAnalysisRegion(game);
   }
 }
 
@@ -927,8 +1071,9 @@ function stopAnalysis() {
   state.analyzing = false;
   state.engineStatus = "idle";
   stockfishEngine.cancel().catch(() => {});
+  state.analysisPending = false;
   setStatus(`Analysis stopped at depth ${state.engineDepth || 0}.`);
-  render();
+  renderAnalysisRegion();
 }
 
 function handleDepthSelection(event) {
@@ -1238,7 +1383,7 @@ function updateCastling(game, move, piece, captured) {
 }
 
 function moveToSan(game, move) {
-  if (move.flag === "castle") return move.to.endsWith("g1") || move.to.endsWith("g8") ? "O-O" : "O-O-O";
+
 
   const type = move.piece.toUpperCase() === "P" ? "" : move.piece.toUpperCase();
   const capture = move.capture ? "x" : "";
@@ -1248,7 +1393,8 @@ function moveToSan(game, move) {
   const pawnFile = !type && capture ? move.from[0] : "";
   const next = cloneGame(game);
   applyMove(next, move);
-  const check = isKingInCheck(next, next.turn) ? "+" : "";
+  const check = isKingInCheck(next, next.turn) ? (legalMoves(next).length ? "+" : "#") : "";
+  if (move.flag === "castle") return (move.to.endsWith("g1") || move.to.endsWith("g8") ? "O-O" : "O-O-O") + check;
   return `${type}${disambiguation}${pawnFile}${capture}${dest}${promotion}${check}`;
 }
 
