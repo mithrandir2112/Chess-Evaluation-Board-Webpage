@@ -49,6 +49,7 @@ const state = {
   selectedSquare: null,
   players: { white: "Player 1", black: "Player 2" },
   inputFormat: "pgn",
+  pgnHeaders: {},
   orientation: readPreference("chess-board-orientation", "white"),
   boardTheme: readPreference("chess-board-theme", "ice-blue"),
   pieceStyle: readPreference("chess-piece-style", "classic"),
@@ -123,6 +124,8 @@ updateDepthControls();
 els.pgnInput.value = "";
 els.parseBtn.addEventListener("click", parseNotationFromInput);
 els.clearBtn.addEventListener("click", clearApp);
+document.querySelector("#copyPgnBtn").addEventListener("click", copyGamePgn);
+document.querySelector("#downloadPgnBtn").addEventListener("click", downloadGamePgn);
 els.sampleBtn.addEventListener("click", () => {
   els.pgnInput.value = SAMPLE_PGN;
   parseNotationFromInput();
@@ -244,7 +247,7 @@ function parseNotationFromInput() {
 
 function loadPgn(pgn) {
     const tokens = tokenizePgn(pgn);
-    if (!tokens.length) throw new Error("The PGN does not contain any moves.");
+    if (!tokens.length && !/\[Result\s|(?:^|\s)\*(?:\s|$)/.test(pgn)) throw new Error("The PGN does not contain any moves.");
     const headers = parsePgnHeaders(pgn);
     const game = headers.SetUp === "1" && headers.FEN ? gameFromFen(headers.FEN) : createGame();
     const history = [{ game: cloneGame(game), san: "Start", move: null }];
@@ -256,6 +259,7 @@ function loadPgn(pgn) {
       history.push({ game: cloneGame(game), san: token, move });
     }
 
+    state.pgnHeaders = headers;
     state.game = game;
     state.history = history;
     state.activePly = history.length - 1;
@@ -281,6 +285,7 @@ function loadFen(fen) {
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "fen";
+  state.pgnHeaders = {};
   const loadedMessage = `FEN position loaded. ${game.turn === "w" ? "White" : "Black"} to move.`;
   setStatus(loadedMessage);
   render();
@@ -320,8 +325,8 @@ function normalizeFen(fen) {
 
 function parsePgnHeaders(pgn) {
   const headers = {};
-  for (const match of pgn.matchAll(/^\s*\[([A-Za-z0-9_]+)\s+"([^"]*)"\]\s*$/gm)) {
-    headers[match[1]] = match[2].trim();
+  for (const match of pgn.matchAll(/^\s*\[([A-Za-z0-9_]+)\s+"((?:\\.|[^"\\])*)"\]\s*$/gm)) {
+    headers[match[1]] = match[2].replace(/\\(["\\])/g, "$1").trim();
   }
   return headers;
 }
@@ -368,6 +373,8 @@ function clearApp() {
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "pgn";
+  state.pgnHeaders = {};
+  document.querySelector("#pgnExportStatus").textContent = "";
   setStatus("New game ready. White to move. Load PGN or FEN to analyze another position.");
   render();
 }
@@ -536,6 +543,55 @@ function createArrowLayer(move) {
 
   svg.append(defs, line);
   return svg;
+}
+
+function exportGamePgn() {
+  const initial = state.history[0].game;
+  const headers = {
+    Event: state.pgnHeaders.Event || "Casual game",
+    Site: state.pgnHeaders.Site || "?",
+    Date: state.pgnHeaders.Date || "????.??.??",
+    Round: state.pgnHeaders.Round || "?",
+    White: state.pgnHeaders.White || state.players.white,
+    Black: state.pgnHeaders.Black || state.players.black,
+    Result: ["1-0", "0-1", "1/2-1/2"].includes(state.pgnHeaders.Result) ? state.pgnHeaders.Result : "*"
+  };
+  const fen = gameToFen(initial);
+  if (fen !== START_FEN) Object.assign(headers, { SetUp: "1", FEN: fen });
+  const escapeTag = value => Array.from(String(value), char => [34, 92].includes(char.charCodeAt(0)) ? String.fromCharCode(92) + char : char.charCodeAt(0) < 32 ? " " : char).join("");
+  const tags = Object.entries(headers).map(([key, value]) => `[${key} "${escapeTag(value)}"]`).join("\n");
+  const moves = [];
+  for (let i = 1; i < state.history.length; i++) {
+    const before = state.history[i - 1].game;
+    if (before.turn === "w") moves.push(`${before.fullmove}.`);
+    else if (i === 1) moves.push(`${before.fullmove}...`);
+    moves.push(moveToSan(before, state.history[i].move));
+  }
+  moves.push(headers.Result);
+  return `${tags}\n\n${moves.join(" ")}\n`;
+}
+
+async function copyGamePgn() {
+  const status = document.querySelector("#pgnExportStatus");
+  try {
+    await navigator.clipboard.writeText(exportGamePgn());
+    status.textContent = "PGN copied.";
+  } catch (_) {
+    status.textContent = "Clipboard unavailable. Use Download PGN to save the game.";
+  }
+}
+
+function downloadGamePgn() {
+  const blob = new Blob([exportGamePgn()], { type: "application/x-chess-pgn;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "chess-game.pgn";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  document.querySelector("#pgnExportStatus").textContent = "PGN download started.";
 }
 
 function renderMoveList() {
@@ -766,6 +822,7 @@ function playMove(from, to, promotion = "q") {
     ...state.history.slice(0, state.activePly + 1),
     { game: cloneGame(game), san, move }
   ];
+  state.pgnHeaders.Result = "*";
   state.activePly = state.history.length - 1;
   state.selectedSquare = null;
   clearAnalysisResult();
@@ -1278,7 +1335,7 @@ function updateCastling(game, move, piece, captured) {
 }
 
 function moveToSan(game, move) {
-  if (move.flag === "castle") return move.to.endsWith("g1") || move.to.endsWith("g8") ? "O-O" : "O-O-O";
+
 
   const type = move.piece.toUpperCase() === "P" ? "" : move.piece.toUpperCase();
   const capture = move.capture ? "x" : "";
@@ -1288,7 +1345,8 @@ function moveToSan(game, move) {
   const pawnFile = !type && capture ? move.from[0] : "";
   const next = cloneGame(game);
   applyMove(next, move);
-  const check = isKingInCheck(next, next.turn) ? "+" : "";
+  const check = isKingInCheck(next, next.turn) ? (legalMoves(next).length ? "+" : "#") : "";
+  if (move.flag === "castle") return (move.to.endsWith("g1") || move.to.endsWith("g8") ? "O-O" : "O-O-O") + check;
   return `${type}${disambiguation}${pawnFile}${capture}${dest}${promotion}${check}`;
 }
 

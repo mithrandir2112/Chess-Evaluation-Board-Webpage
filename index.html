@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css?v=13" />
+    <link rel="stylesheet" href="./src/styles.css?v=14" />
   </head>
   <body>
     <main class="app">
@@ -201,6 +201,11 @@
               <h2>Game Moves</h2>
               <span id="moveCount">Move 0 of 0</span>
             </div>
+            <div class="pgn-export-actions">
+              <button id="copyPgnBtn" type="button">Copy PGN</button>
+              <button id="downloadPgnBtn" type="button">Download PGN</button>
+              <span id="pgnExportStatus" role="status"></span>
+            </div>
             <div id="moveList" class="move-list" aria-label="Move list"></div>
           </div>
         </aside>
@@ -209,6 +214,6 @@
 
     <script defer src="./src/stockfish-engine.js?v=1"></script>
     <script defer src="./src/captured-material.js?v=1"></script>
-    <script defer src="./src/app.js?v=10"></script>
+    <script defer src="./src/app.js?v=11"></script>
   </body>
 </html>

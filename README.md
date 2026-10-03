@@ -96,3 +96,7 @@ The board starts with all 32 pieces in the standard starting position, White to 
 Small captured-piece icons appear beneath each player's name and stay with that player when the board flips. PGN captures follow the selected move, including en passant, and update when you rewind or play a different continuation. PGN setup positions with `SetUp "1"` and `FEN` headers are supported.
 
 FEN capture rows are marked **Inferred**: missing pieces are compared with the normal starting inventory. Visible extra queens, rooks, bishops, or knights account for promoted pawns. A position alone cannot reveal every past promotion or capture, so the initial inventory is an estimate; subsequent moves are tracked directly. The same applies to PGN games beginning from a FEN setup position.
+
+### Exporting a game
+
+Use **Copy PGN** or **Download PGN** beside Game Moves to export the complete current continuation, even while reviewing an earlier move. Playing a different move replaces the future continuation. Download saves `chess-game.pgn`; Copy uses the clipboard and reports when browser permissions prevent access. The input box is unchanged. Exports include player names, standard game headers and the starting FEN when needed. New or edited games use `*` (unfinished); imported Result headers are retained until a move is played. Clear resets the export to a new game.
