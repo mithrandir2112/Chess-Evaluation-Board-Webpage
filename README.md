@@ -91,7 +91,7 @@ AddType application/wasm .wasm
 
 ### Startup and captured pieces
 
-The board starts empty. Load PGN/FEN or explicitly select **Load sample PGN** to populate it. **Clear** empties the board, clears captures and evaluation, and cancels pending or running analysis.
+The board starts with all 32 pieces in the standard starting position, White to move, and no moves played. You can play immediately, load PGN/FEN, or explicitly select **Load sample PGN**. **Clear** resets to a new game, clears captures and evaluation, and cancels pending or running analysis.
 
 Small captured-piece icons appear beneath each player's name and stay with that player when the board flips. PGN captures follow the selected move, including en passant, and update when you rewind or play a different continuation. PGN setup positions with `SetUp "1"` and `FEN` headers are supported.
 

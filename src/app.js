@@ -362,13 +362,13 @@ function clearApp() {
   state.selectedSquare = null;
   stockfishEngine.cancel().catch(() => {});
   els.pgnInput.value = "";
-  state.game = { board: Array.from({ length: 8 }, () => Array(8).fill(null)), turn: "w", castling: "", ep: "-", halfmove: 0, fullmove: 1 };
+  state.game = createGame();
   state.history = [{ game: cloneGame(state.game), san: "Start", move: null }];
   state.activePly = 0;
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
-  state.inputFormat = "empty";
-  setStatus("Ready for PGN or FEN notation.");
+  state.inputFormat = "pgn";
+  setStatus("New game ready. White to move. Load PGN or FEN to analyze another position.");
   render();
 }
 
@@ -393,8 +393,8 @@ function render() {
 function renderPlayerLabels(game) {
   const topColor = state.orientation === "white" ? "black" : "white";
   const bottomColor = topColor === "white" ? "black" : "white";
-  setPlayerLabel("top", topColor, state.inputFormat === "empty" ? null : game.turn);
-  setPlayerLabel("bottom", bottomColor, state.inputFormat === "empty" ? null : game.turn);
+  setPlayerLabel("top", topColor, game.turn);
+  setPlayerLabel("bottom", bottomColor, game.turn);
   renderCapturedPieces("top", topColor);
   renderCapturedPieces("bottom", bottomColor);
 }
@@ -413,11 +413,6 @@ function setPlayerLabel(side, color, turn) {
 function renderCapturedPieces(side, color) {
   const row = document.querySelector(`#${side}Captures`);
   row.replaceChildren();
-  if (state.inputFormat === "empty") {
-    row.setAttribute("aria-label", `Captured by ${color}: none.`);
-    row.removeAttribute("title");
-    return;
-  }
   const inferred = state.inputFormat.startsWith("fen");
   const captured = window.CapturedMaterial.atPly(state.history, state.activePly, inferred)[color === "white" ? "w" : "b"];
   const names = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen" };
@@ -843,7 +838,7 @@ function updateControls() {
   els.prevBtn.disabled = state.activePly === 0;
   els.nextBtn.disabled = state.activePly >= state.history.length - 1;
   els.lastBtn.disabled = !hasHistory || state.activePly >= state.history.length - 1;
-  els.analyzeBtn.disabled = state.analyzing || state.inputFormat === "empty";
+  els.analyzeBtn.disabled = state.analyzing;
   els.parseBtn.disabled = state.analyzing;
   els.stopBtn.hidden = !state.analyzing;
   els.analysisProgress.textContent = state.analyzing
@@ -854,12 +849,11 @@ function updateControls() {
         : `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
     : state.engineDepth ? `Completed at depth ${state.engineDepth}` : "Ready";
   els.positionLabel.textContent = state.activePly === 0
-    ? state.inputFormat === "empty" ? "Empty board" : state.inputFormat.startsWith("fen") ? "FEN position" : "Start position"
+    ? state.inputFormat.startsWith("fen") ? "FEN position" : "Start position"
     : `After ${state.history[state.activePly].san}`;
 }
 
 async function analyzeCurrentPosition(options = {}) {
-  if (state.inputFormat === "empty") return;
   if (!options.automatic && automaticAnalysisTimer !== null) {
     clearTimeout(automaticAnalysisTimer);
     automaticAnalysisTimer = null;
@@ -930,7 +924,6 @@ async function analyzeCurrentPosition(options = {}) {
 }
 
 function scheduleAutomaticAnalysis(options = {}) {
-  if (state.inputFormat === "empty") return;
   const analysisAlreadyQueued = automaticAnalysisTimer !== null;
   if (analysisAlreadyQueued) clearTimeout(automaticAnalysisTimer);
 

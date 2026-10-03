@@ -15,12 +15,12 @@ test('recorded captures include en passant and rewind', () => {
   expect(captures.atPly(history, 0)).toEqual({ w: [], b: [] });
 });
 for (const width of [390, 768, 1101, 1440]) {
-  test(`empty startup and capture rows at ${width}px`, async ({ page }, testInfo) => {
+  test(`new-game startup and capture rows at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');
-    await expect(page.locator('#board .piece')).toHaveCount(0);
-    await expect(page.locator('#analyzeBtn')).toBeDisabled();
-    await expect(page.locator('#positionLabel')).toHaveText('Empty board');
+    await expect(page.locator('#board .piece')).toHaveCount(32);
+    await expect(page.locator('#analyzeBtn')).toBeEnabled();
+    await expect(page.locator('#positionLabel')).toHaveText('Start position');
     await page.locator('#pgnInput').fill('1. e4 d5 2. exd5 Qxd5');
     await page.locator('#parseBtn').click();
     await expect(page.locator('#bottomCaptures')).toHaveAttribute('aria-label', /Captured by white: 1 pawn/);
@@ -34,9 +34,9 @@ for (const width of [390, 768, 1101, 1440]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.locator('#clearBtn').click();
     await page.waitForTimeout(350);
-    await expect(page.locator('#board .piece')).toHaveCount(0);
+    await expect(page.locator('#board .piece')).toHaveCount(32);
     await expect(page.locator('.captured-piece')).toHaveCount(0);
-    await expect(page.locator('#analyzeBtn')).toBeDisabled();
+    await expect(page.locator('#analyzeBtn')).toBeEnabled();
     await expect(page.locator('#positionEval')).toHaveText('Not analyzed');
     await page.locator('#pgnInput').fill('rnbqkbnr/1ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     await page.locator('#parseBtn').click();
@@ -59,13 +59,13 @@ test('PGN setup positions, duplicate captures, and clearing accessibility state'
   await page.locator('#prevBtn').click();
   await expect(page.locator('#bottomCaptures')).toHaveAttribute('aria-label', /7 pawns/);
   await page.locator('#clearBtn').click();
-  await expect(page.locator('#bottomCaptures')).toHaveAttribute('aria-label', 'Captured by white: none.');
+  await expect(page.locator('#bottomCaptures')).toHaveAttribute('aria-label', 'Captured by white: none. Recorded moves.');
   await page.locator('#sampleBtn').click();
   await expect(page.locator('#board .piece')).toHaveCount(32);
   await page.waitForTimeout(250);
   await page.locator('#clearBtn').click();
   await page.waitForTimeout(250);
-  await expect(page.locator('#positionLabel')).toHaveText('Empty board');
+  await expect(page.locator('#positionLabel')).toHaveText('Start position');
   await expect(page.locator('#analysisProgress')).toHaveText('Ready');
 });
 
@@ -75,4 +75,18 @@ test('black-to-move PGN setup keeps its move number and capture ownership', asyn
   await page.locator('#parseBtn').click();
   await expect(page.locator('.move-number')).toHaveText('19...');
   await expect(page.locator('#topCaptures')).toHaveAttribute('aria-label', /Captured by black: 8 pawns/);
+});
+
+test('fresh game is immediately playable with no sample moves', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#moveList .move-token')).toHaveCount(0);
+  await expect(page.locator('#pgnInput')).toHaveValue('');
+  await expect(page.locator('.captured-piece')).toHaveCount(0);
+  await page.locator('[data-square="e2"]').click();
+  await page.locator('[data-square="e4"]').click();
+  await expect(page.locator('[data-square="e4"] .piece')).toHaveAttribute('data-color', 'w');
+  await expect(page.locator('#moveList .move-token')).toHaveText('e4');
+  await page.locator('#clearBtn').click();
+  await expect(page.locator('[data-square="e2"] .piece')).toHaveAttribute('data-color', 'w');
+  await expect(page.locator('#moveList .move-token')).toHaveCount(0);
 });
