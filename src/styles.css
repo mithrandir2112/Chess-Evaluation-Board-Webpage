@@ -1477,3 +1477,8 @@ textarea:focus {
 }
 /* Reserve two lines for changing engine/evaluation text. */
 .metric strong { min-height: 2.5em; }
+
+/* Stop belongs in the progress row so it never displaces Analyze. */
+.analysis-progress { min-height: 60px; }
+.analysis-progress .stop-button { margin-left: auto; min-height: 42px; flex-shrink: 0; }
+#analyzeBtn:disabled { opacity: 1; cursor: wait; }

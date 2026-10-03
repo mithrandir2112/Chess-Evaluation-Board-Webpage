@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css?v=16" />
+    <link rel="stylesheet" href="./src/styles.css?v=17" />
   </head>
   <body>
     <main class="app">
@@ -178,13 +178,14 @@
                   <input id="customDepthInput" type="number" min="6" max="30" value="22" aria-label="Custom analysis depth" />
                 </label>
                 <button id="analyzeBtn" class="primary">Analyze</button>
-                <button id="stopBtn" class="icon-button stop-button" title="Stop analysis" aria-label="Stop analysis" hidden>
-                  <span aria-hidden="true">■</span>
-                </button>
+
               </div>
             </div>
             <div class="analysis-progress">
               <span id="analysisProgress">Ready</span>
+                <button id="stopBtn" class="icon-button stop-button" title="Stop analysis" aria-label="Stop analysis" hidden>
+                  <span aria-hidden="true">■</span>
+                </button>
               <span id="depthWarning" class="depth-warning" hidden>High depths may take several minutes.</span>
             </div>
             <div id="candidateList" class="candidate-list" aria-live="polite"></div>
