@@ -102,3 +102,52 @@ FEN capture rows are marked **Inferred**: missing pieces are compared with the n
 Use **Copy PGN** or **Download PGN** beside Game Moves to export the complete current continuation, even while reviewing an earlier move. Playing a different move replaces the future continuation. Download saves `chess-game.pgn`; Copy uses the clipboard and reports when browser permissions prevent access. The input box is unchanged. Exports include player names, standard game headers and the starting FEN when needed. New or edited games use `*` (unfinished); imported Result headers are retained until a move is played. Clear resets the export to a new game.
 
 Engine progress updates the existing analysis values and candidate slots without replacing board pieces or move-history buttons. Candidate space stays reserved during searches, and outdated scores are replaced with “Analyzing…” after a move. Desktop navigation and appearance selectors use 44px controls. Load Sample is labeled beside the notation actions.
+
+
+### Native and host themes
+
+The synchronous `src/theme.js` script runs before the stylesheet to select a theme before paint. Standalone chess uses the saved `chess-ui-theme` light/dark choice, otherwise follows `prefers-color-scheme`, including live system changes. Automatic system choices are never persisted. The local toggle saves an explicit choice. `ChessTheme.setPreference("system")` clears it and resumes system behavior. Blocked storage does not prevent theming.
+
+A host supplies attributes before loading `theme.js`:
+
+```html
+<html data-chess-theme-source="host" data-theme="forest" data-chess-color-scheme="dark">
+```
+
+`data-theme` is the host's palette name, not an enum restricted to light/dark. `data-chess-color-scheme` selects light or dark native fallback colors and native form appearance for named palettes. For light/dark names it is inferred when omitted and follows subsequent theme changes. For named themes, set the scheme explicitly when changing the palette. A preexisting `data-theme` also selects host ownership automatically. A host attaching later should set `data-chess-theme-source="host"` before supplying attributes and tokens; changing `data-theme` externally also transfers ownership when its value differs from the native selection.
+
+In host mode chess never writes a local theme preference or reacts to OS changes, and hides `#themeToggle`. The host may omit that button entirely. Updating root attributes or tokens takes effect without reloading, repainting the board DOM, or resetting play/analysis. To release control, set `data-chess-theme-source="native"`; the saved local preference or system theme resumes and host tokens are ignored. A host should then stop writing theme attributes.
+
+The CSS contract uses the actual `--theme-*` semantic names already implemented by mithrandir-site (the older issue examples used proposed `--site-*` names):
+
+| Host tokens | Chess chrome |
+| --- | --- |
+| `--theme-page` | Page background |
+| `--theme-surface-raised`, `--theme-surface-muted`, `--theme-control` | Panels, metrics, controls |
+| `--theme-text`, `--theme-text-muted`, `--theme-border` | Text and borders |
+| `--theme-accent`, `--theme-accent-strong`, `--theme-accent-contrast` | Actions, headings, text on filled actions |
+| `--theme-focus`, `--theme-focus-soft` | Keyboard focus border and ring |
+| `--theme-maize`, `--theme-maize-bright` | Supporting accents |
+| `--theme-danger`, `--theme-danger-surface` | Error states |
+| `--theme-shadow` | Panel/board shadows |
+
+Every token is optional and falls back to native light/dark values. Supply valid CSS values and contrasting accent/contrast colors together for a custom palette. Board-square themes, piece palettes, legal-move markers and evaluation colors retain their chess-specific meaning; host chrome tokens do not replace them. There are no site-file imports, site-event dependencies, or required host controllers.
+
+Example host CSS (load alongside the native stylesheet):
+
+```css
+:root[data-theme="forest"] {
+  --theme-page: #10251e;
+  --theme-surface-raised: #17352b;
+  --theme-surface-muted: #1d4135;
+  --theme-control: #244f40;
+  --theme-text: #f1fff7;
+  --theme-text-muted: #b2d4c2;
+  --theme-border: #487762;
+  --theme-accent: #82ddaa;
+  --theme-accent-strong: #a1f4c5;
+  --theme-accent-contrast: #10251e;
+}
+```
+
+For mithrandir-site integration, keep the shared theme bootstrap before `src/theme.js`, include the native stylesheet and the site's token definitions, and retain only site-specific navigation/layout adaptations. The existing shared bootstrap supplies `data-theme` before chess starts, so its controller remains authoritative. This standalone release does not itself modify or deploy the integrated site.
