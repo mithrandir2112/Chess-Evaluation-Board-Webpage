@@ -371,6 +371,7 @@ function clearApp() {
   state.history = [{ game: cloneGame(state.game), san: "Start", move: null }];
   state.activePly = 0;
   clearAnalysisResult();
+  state.analysisPending = false;
   state.players = { white: "Player 1", black: "Player 2" };
   state.inputFormat = "pgn";
   state.pgnHeaders = {};
@@ -380,6 +381,7 @@ function clearApp() {
 }
 
 function clearAnalysisResult() {
+  state.analysisPending = true;
   state.bestMove = null;
   state.engineScore = null;
   state.engineDepth = 0;
@@ -389,12 +391,26 @@ function clearAnalysisResult() {
 function render() {
   const current = state.history[state.activePly]?.game || createGame();
   renderBoard(current);
-  renderEvaluationBar(current);
   renderPlayerLabels(current);
   renderMoveList();
-  renderAnalysis(current);
+  renderAnalysisRegion(current);
+}
+
+// Engine messages update values and the arrow, never the board or move history.
+function renderAnalysisRegion(game = state.history[state.activePly].game) {
+  renderEvaluationBar(game);
+  renderAnalysis(game);
   renderCandidates();
   updateControls();
+  const key = JSON.stringify([state.orientation, state.bestMove?.from, state.bestMove?.to]);
+  if (els.board.dataset.arrowKey !== key) {
+    els.board.querySelector(".arrow-layer")?.replaceWith(createArrowLayer(state.bestMove));
+    for (const square of els.board.querySelectorAll(".square")) {
+      square.classList.toggle("from", square.dataset.square === state.bestMove?.from);
+      square.classList.toggle("to", square.dataset.square === state.bestMove?.to);
+    }
+    els.board.dataset.arrowKey = key;
+  }
 }
 
 function renderPlayerLabels(game) {
@@ -449,6 +465,10 @@ function renderCapturedPieces(side, color) {
 }
 
 function renderBoard(game) {
+  const key = JSON.stringify([gameToFen(game), state.orientation, state.selectedSquare]);
+  if (els.board.dataset.positionKey === key) return;
+  els.board.dataset.positionKey = key;
+  delete els.board.dataset.arrowKey;
   els.board.innerHTML = "";
   const arrow = createArrowLayer(state.bestMove);
   const selectedMoves = state.selectedSquare
@@ -595,25 +615,41 @@ function downloadGamePgn() {
 }
 
 function renderMoveList() {
-  els.moveList.innerHTML = "";
   const moves = state.history.slice(1);
   els.moveCount.textContent = `Move ${state.activePly} of ${moves.length}`;
-
-  let pair = null;
+  const offset = state.history[0].game.turn === "b" ? 1 : 0;
+  if (els.moveList.dataset.offset !== String(offset)) {
+    els.moveList.replaceChildren();
+    els.moveList.dataset.offset = String(offset);
+  }
+  const count = Math.ceil((moves.length + offset) / 2);
+  // Reuse existing rows/buttons; only append or remove the changed continuation.
+  while (els.moveList.children.length > (moves.length ? count : 0)) els.moveList.lastElementChild.remove();
   for (let i = 0; i < moves.length; i++) {
-    const before = state.history[i].game;
-    if (before.turn === "w" || !pair) {
+    const rowIndex = Math.floor((i + offset) / 2);
+    let pair = els.moveList.children[rowIndex];
+    if (!pair) {
       pair = document.createElement("div");
       pair.className = "move-pair";
-      const moveNo = document.createElement("span");
-      moveNo.className = "move-number";
-      moveNo.textContent = `${before.fullmove}${before.turn === "w" ? "." : "..."}`;
-      pair.append(moveNo);
-      if (before.turn === "b") pair.append(document.createElement("span"));
+      pair.innerHTML = '<span class="move-number"></span><span></span><span></span>';
       els.moveList.append(pair);
     }
-    pair.append(createMoveButton(moves[i], i + 1));
-    if (before.turn === "b") pair = null;
+    const before = state.history[i].game;
+    pair.firstElementChild.textContent = `${before.fullmove}${rowIndex === 0 && offset ? "..." : "."}`;
+    const slot = before.turn === "w" ? 1 : 2;
+    let button = pair.children[slot];
+    if (!button.matches("button")) {
+      const replacement = createMoveButton(moves[i], i + 1);
+      button.replaceWith(replacement);
+      button = replacement;
+    }
+    if (button.textContent !== moves[i].san) button.textContent = moves[i].san;
+    button.classList.toggle("active", i + 1 === state.activePly);
+  }
+  // A replacement line can end with White after previously having a Black reply.
+  if (moves.length && (moves.length + offset) % 2) {
+    const last = els.moveList.lastElementChild.children[2];
+    if (last.matches("button")) last.replaceWith(document.createElement("span"));
   }
 }
 
@@ -839,7 +875,7 @@ function renderEvaluationBar(game) {
   els.blackEvalFill.style.height = `${blackPercent}%`;
   els.positionEval.textContent = state.engineScore
     ? formatEngineScore(state.engineScore)
-    : state.analyzing ? "Analyzing..." : "Not analyzed";
+    : state.analyzing || state.analysisPending ? "Analyzing..." : "Not analyzed";
   els.positionEval.style.color = score > 25 ? "var(--accent-strong)" : score < -25 ? "var(--ink)" : "var(--muted)";
   const isFlipped = state.orientation === "black";
   els.evalBar.classList.toggle("flipped", isFlipped);
@@ -864,28 +900,38 @@ function renderAnalysis(game) {
 }
 
 function renderCandidates() {
-  els.candidateList.innerHTML = "";
-
-  if (!state.candidates.length) {
+  if (!els.candidateList.children.length) {
     const empty = document.createElement("div");
     empty.className = "candidate-empty";
-    empty.textContent = state.analyzing ? "Calculating candidate lines..." : "Analyze this position to compare candidate moves.";
     els.candidateList.append(empty);
-    return;
+    for (let index = 0; index < 3; index++) {
+      const row = document.createElement("button");
+      row.className = "candidate-row";
+      row.type = "button";
+      row.innerHTML = `<span class="candidate-rank">${index + 1}</span><strong class="candidate-move"></strong><span class="candidate-score"></span><span class="candidate-pv"></span><span class="candidate-play" aria-hidden="true">▶</span>`;
+      row.addEventListener("click", () => {
+        const candidate = state.candidates[index];
+        if (candidate) playCandidate(candidate);
+      });
+      els.candidateList.append(row);
+    }
   }
-
-  for (const [index, candidate] of state.candidates.entries()) {
-    const row = document.createElement("button");
-    row.className = "candidate-row";
-    row.type = "button";
+  const empty = els.candidateList.firstElementChild;
+  empty.hidden = state.candidates.length > 0;
+  const message = state.analyzing || state.analysisPending ? "Calculating candidate lines..." : "Analyze this position to compare candidate moves.";
+  if (empty.textContent !== message) empty.textContent = message;
+  for (let index = 0; index < 3; index++) {
+    const row = els.candidateList.children[index + 1];
+    const candidate = state.candidates[index];
+    row.style.visibility = candidate ? "visible" : "hidden";
+    row.disabled = !candidate;
+    if (!candidate) continue;
     row.title = `Play ${candidate.san}. ${candidate.pv.join(" ")}`;
     row.setAttribute("aria-label", `Play candidate ${index + 1}: ${candidate.san}`);
-    row.innerHTML = `<span class="candidate-rank">${index + 1}</span><strong class="candidate-move"></strong><span class="candidate-score"></span><span class="candidate-pv"></span><span class="candidate-play" aria-hidden="true">▶</span>`;
-    row.querySelector(".candidate-move").textContent = candidate.san;
-    row.querySelector(".candidate-score").textContent = formatEngineScore(candidate.score);
-    row.querySelector(".candidate-pv").textContent = candidate.pv.join(" ");
-    row.addEventListener("click", () => playCandidate(candidate));
-    els.candidateList.append(row);
+    for (const [selector, value] of [[".candidate-move", candidate.san], [".candidate-score", formatEngineScore(candidate.score)], [".candidate-pv", candidate.pv.join(" ")]]) {
+      const node = row.querySelector(selector);
+      if (node.textContent !== value) node.textContent = value;
+    }
   }
 }
 
@@ -922,7 +968,7 @@ async function analyzeCurrentPosition(options = {}) {
   clearAnalysisResult();
   state.engineName = "Stockfish 18 Lite";
   if (!options.automatic) setStatus("Analyzing selected position...");
-  render();
+  renderAnalysisRegion(game);
 
   try {
     const result = await stockfishEngine.analyze(gameToFen(game), {
@@ -939,10 +985,9 @@ async function analyzeCurrentPosition(options = {}) {
         if (info.score) state.engineScore = info.score;
         if (info.depth) state.engineDepth = info.depth;
         state.candidates = stockfishVariationsToMoves(game, info.variations);
-        renderEvaluationBar(game);
-        renderAnalysis(game);
-        renderCandidates();
-        updateControls();
+        const leading = state.candidates[0];
+        state.bestMove = leading ? { ...moveFromUci(game, leading.uci), ...leading } : null;
+        renderAnalysisRegion(game);
       }
     });
 
@@ -953,12 +998,13 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineName = result.engineName || "Stockfish 18 Lite";
     state.candidates = stockfishVariationsToMoves(game, result.variations);
     state.analyzing = false;
+    state.analysisPending = false;
     state.engineStatus = "ready";
     const resultMessage = state.bestMove
       ? `Stockfish depth ${state.engineDepth}: best move ${state.bestMove.san || state.bestMove.uci}.`
       : "No legal moves in this position.";
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage);
-    render();
+    renderAnalysisRegion(game);
   } catch (error) {
     if (error.name === "AbortError" || analysisId !== state.analysisId) return;
 
@@ -968,6 +1014,7 @@ async function analyzeCurrentPosition(options = {}) {
     state.engineDepth = 3;
     state.engineName = "Prototype fallback";
     state.analyzing = false;
+    state.analysisPending = false;
     state.engineStatus = "failed";
     const failure = error.isStockfishEngineError
       ? `Stockfish failed after an automatic retry (${error.message})`
@@ -976,7 +1023,7 @@ async function analyzeCurrentPosition(options = {}) {
       ? `${failure}; prototype fallback suggests ${best.san || best.uci}.`
       : `${failure}; no legal moves were found.`;
     setStatus(options.loadedMessage ? `${options.loadedMessage} ${resultMessage}` : resultMessage, true);
-    render();
+    renderAnalysisRegion(game);
   }
 }
 
@@ -1024,8 +1071,9 @@ function stopAnalysis() {
   state.analyzing = false;
   state.engineStatus = "idle";
   stockfishEngine.cancel().catch(() => {});
+  state.analysisPending = false;
   setStatus(`Analysis stopped at depth ${state.engineDepth || 0}.`);
-  render();
+  renderAnalysisRegion();
 }
 
 function handleDepthSelection(event) {

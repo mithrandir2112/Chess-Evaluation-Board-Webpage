@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css?v=15" />
+    <link rel="stylesheet" href="./src/styles.css?v=16" />
   </head>
   <body>
     <main class="app">
@@ -21,14 +21,10 @@
             <div class="brand-lockup">
               <span class="brand-mark" aria-hidden="true">♞</span>
               <div>
-                <span class="eyebrow">Analysis workspace</span>
               <h1>Chess Analyzer</h1>
               <p>Load a game or position, then explore the engine's best move.</p>
               </div>
             </div>
-            <button id="sampleBtn" class="icon-button" title="Load sample PGN" aria-label="Load sample PGN">
-              <span aria-hidden="true">↺</span>
-            </button>
           </div>
 
           <label class="field">
@@ -39,6 +35,7 @@
           <div class="actions">
             <button id="parseBtn" class="primary">Load &amp; Analyze</button>
             <button id="clearBtn">Clear</button>
+            <button id="sampleBtn" title="Load sample PGN" aria-label="Load sample PGN">Load Sample</button>
           </div>
 
           <div id="status" class="status" role="status">Ready for PGN or FEN notation.</div>
@@ -211,6 +208,6 @@
 
     <script defer src="./src/stockfish-engine.js?v=1"></script>
     <script defer src="./src/captured-material.js?v=1"></script>
-    <script defer src="./src/app.js?v=11"></script>
+    <script defer src="./src/app.js?v=12"></script>
   </body>
 </html>

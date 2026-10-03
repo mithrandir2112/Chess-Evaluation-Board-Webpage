@@ -100,3 +100,5 @@ FEN capture rows are marked **Inferred**: missing pieces are compared with the n
 ### Exporting a game
 
 Use **Copy PGN** or **Download PGN** beside Game Moves to export the complete current continuation, even while reviewing an earlier move. Playing a different move replaces the future continuation. Download saves `chess-game.pgn`; Copy uses the clipboard and reports when browser permissions prevent access. The input box is unchanged. Exports include player names, standard game headers and the starting FEN when needed. New or edited games use `*` (unfinished); imported Result headers are retained until a move is played. Clear resets the export to a new game.
+
+Engine progress updates the existing analysis values and candidate slots without replacing board pieces or move-history buttons. Candidate space stays reserved during searches, and outdated scores are replaced with “Analyzing…” after a move. Desktop navigation and appearance selectors use 44px controls. Load Sample is labeled beside the notation actions.
