@@ -653,7 +653,7 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.player-label > span:last-child {
+.player-label > span[id$="PlayerColor"] {
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1414,3 +1414,12 @@ textarea:focus {
     font-size: 9px;
   }
 }
+
+/* Compact capture rows stay with their player when the board flips. */
+.captured-pieces { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 23px; margin-top: -5px; }
+.capture-group { display: inline-flex; }
+.captured-piece { font-family: "Chess Symbols", serif; font-size: 20px; line-height: 23px; }
+.captured-piece + .captured-piece { margin-left: -7px; }
+.captured-piece.white { color: var(--white-piece); -webkit-text-stroke: .6px var(--white-piece-outline); }
+.captured-piece.black { color: var(--black-piece); -webkit-text-stroke: .6px var(--black-piece-outline); }
+.capture-note { font-size: 10px; color: var(--muted); }

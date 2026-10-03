@@ -11,7 +11,7 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
-    <link rel="stylesheet" href="./src/styles.css?v=12" />
+    <link rel="stylesheet" href="./src/styles.css?v=13" />
   </head>
   <body>
     <main class="app">
@@ -119,12 +119,14 @@
                   <span class="turn-indicator" aria-hidden="true"></span>
                   <strong id="topPlayerName">Player 2</strong>
                   <span id="topPlayerColor">Black</span>
+                  <div id="topCaptures" class="captured-pieces" role="img"></div>
                 </div>
                 <div id="board" class="board" aria-label="Chessboard"></div>
                 <div id="bottomPlayer" class="player-label" aria-label="Bottom player">
                   <span class="turn-indicator" aria-hidden="true"></span>
                   <strong id="bottomPlayerName">Player 1</strong>
                   <span id="bottomPlayerColor">White</span>
+                  <div id="bottomCaptures" class="captured-pieces" role="img"></div>
                 </div>
               </div>
             </div>
@@ -206,6 +208,7 @@
     </main>
 
     <script defer src="./src/stockfish-engine.js?v=1"></script>
-    <script defer src="./src/app.js?v=8"></script>
+    <script defer src="./src/captured-material.js?v=1"></script>
+    <script defer src="./src/app.js?v=9"></script>
   </body>
 </html>

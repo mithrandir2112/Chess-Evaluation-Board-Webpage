@@ -120,7 +120,7 @@ let automaticAnalysisTimer = null;
 applyPreferences();
 updateDepthControls();
 
-els.pgnInput.value = SAMPLE_PGN;
+els.pgnInput.value = "";
 els.parseBtn.addEventListener("click", parseNotationFromInput);
 els.clearBtn.addEventListener("click", clearApp);
 els.sampleBtn.addEventListener("click", () => {
@@ -146,7 +146,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 setupResponsiveBoard();
-parseNotationFromInput();
+clearApp();
 
 function setupResponsiveBoard() {
   const desktopLayout = window.matchMedia("(min-width: 1101px)");
@@ -246,7 +246,7 @@ function loadPgn(pgn) {
     const tokens = tokenizePgn(pgn);
     if (!tokens.length) throw new Error("The PGN does not contain any moves.");
     const headers = parsePgnHeaders(pgn);
-    const game = createGame();
+    const game = headers.SetUp === "1" && headers.FEN ? gameFromFen(headers.FEN) : createGame();
     const history = [{ game: cloneGame(game), san: "Start", move: null }];
 
     for (const token of tokens) {
@@ -265,7 +265,7 @@ function loadPgn(pgn) {
       white: playerName(headers.White, "Player 1", "White"),
       black: playerName(headers.Black, "Player 2", "Black")
     };
-    state.inputFormat = "pgn";
+    state.inputFormat = headers.SetUp === "1" && headers.FEN ? "fen-pgn" : "pgn";
     const loadedMessage = `PGN loaded: ${tokens.length} moves.`;
     setStatus(loadedMessage);
     render();
@@ -353,17 +353,21 @@ function setActivePly(ply) {
 }
 
 function clearApp() {
+  clearTimeout(automaticAnalysisTimer);
+  automaticAnalysisTimer = null;
+  finishPointerDrag();
   state.analysisId += 1;
   state.analyzing = false;
   state.engineStatus = "idle";
   state.selectedSquare = null;
   stockfishEngine.cancel().catch(() => {});
   els.pgnInput.value = "";
-  state.history = [{ game: createGame(), san: "Start", move: null }];
+  state.game = { board: Array.from({ length: 8 }, () => Array(8).fill(null)), turn: "w", castling: "", ep: "-", halfmove: 0, fullmove: 1 };
+  state.history = [{ game: cloneGame(state.game), san: "Start", move: null }];
   state.activePly = 0;
   clearAnalysisResult();
   state.players = { white: "Player 1", black: "Player 2" };
-  state.inputFormat = "pgn";
+  state.inputFormat = "empty";
   setStatus("Ready for PGN or FEN notation.");
   render();
 }
@@ -389,8 +393,10 @@ function render() {
 function renderPlayerLabels(game) {
   const topColor = state.orientation === "white" ? "black" : "white";
   const bottomColor = topColor === "white" ? "black" : "white";
-  setPlayerLabel("top", topColor, game.turn);
-  setPlayerLabel("bottom", bottomColor, game.turn);
+  setPlayerLabel("top", topColor, state.inputFormat === "empty" ? null : game.turn);
+  setPlayerLabel("bottom", bottomColor, state.inputFormat === "empty" ? null : game.turn);
+  renderCapturedPieces("top", topColor);
+  renderCapturedPieces("bottom", bottomColor);
 }
 
 function setPlayerLabel(side, color, turn) {
@@ -402,6 +408,42 @@ function setPlayerLabel(side, color, turn) {
   colorLabel.textContent = color[0].toUpperCase() + color.slice(1);
   label.classList.toggle("active", turn === shortColor);
   label.setAttribute("aria-label", `${state.players[color]}, ${color}${turn === shortColor ? ", to move" : ""}`);
+}
+
+function renderCapturedPieces(side, color) {
+  const row = document.querySelector(`#${side}Captures`);
+  row.replaceChildren();
+  if (state.inputFormat === "empty") {
+    row.setAttribute("aria-label", `Captured by ${color}: none.`);
+    row.removeAttribute("title");
+    return;
+  }
+  const inferred = state.inputFormat.startsWith("fen");
+  const captured = window.CapturedMaterial.atPly(state.history, state.activePly, inferred)[color === "white" ? "w" : "b"];
+  const names = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen" };
+  const descriptions = [];
+  for (const role of ["p", "n", "b", "r", "q"]) {
+    const count = captured.filter(piece => piece.toLowerCase() === role).length;
+    if (!count) continue;
+    descriptions.push(`${count} ${names[role]}${count === 1 ? "" : "s"}`);
+    const group = document.createElement("span");
+    group.className = "capture-group";
+    group.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < count; i++) {
+      const icon = document.createElement("span");
+      icon.className = `captured-piece ${color === "white" ? "black" : "white"}`;
+      icon.textContent = PIECES[role];
+      group.append(icon);
+    }
+    row.append(group);
+  }
+  const description = `Captured by ${color}: ${descriptions.join(", ") || "none"}. ${inferred ? "Inferred from FEN; promotions can make the original captures uncertain." : "Recorded moves."}`;
+  row.setAttribute("aria-label", description);
+  row.title = description;
+  const note = document.createElement("span");
+  note.className = "capture-note";
+  note.textContent = inferred ? "Inferred from FEN" : captured.length ? "" : "No captures";
+  row.append(note);
 }
 
 function renderBoard(game) {
@@ -506,18 +548,21 @@ function renderMoveList() {
   const moves = state.history.slice(1);
   els.moveCount.textContent = `Move ${state.activePly} of ${moves.length}`;
 
-  for (let i = 0; i < moves.length; i += 2) {
-    const pair = document.createElement("div");
-    pair.className = "move-pair";
-
-    const moveNo = document.createElement("span");
-    moveNo.className = "move-number";
-    moveNo.textContent = `${i / 2 + 1}.`;
-    pair.append(moveNo);
-
+  let pair = null;
+  for (let i = 0; i < moves.length; i++) {
+    const before = state.history[i].game;
+    if (before.turn === "w" || !pair) {
+      pair = document.createElement("div");
+      pair.className = "move-pair";
+      const moveNo = document.createElement("span");
+      moveNo.className = "move-number";
+      moveNo.textContent = `${before.fullmove}${before.turn === "w" ? "." : "..."}`;
+      pair.append(moveNo);
+      if (before.turn === "b") pair.append(document.createElement("span"));
+      els.moveList.append(pair);
+    }
     pair.append(createMoveButton(moves[i], i + 1));
-    pair.append(moves[i + 1] ? createMoveButton(moves[i + 1], i + 2) : document.createElement("span"));
-    els.moveList.append(pair);
+    if (before.turn === "b") pair = null;
   }
 }
 
@@ -798,7 +843,7 @@ function updateControls() {
   els.prevBtn.disabled = state.activePly === 0;
   els.nextBtn.disabled = state.activePly >= state.history.length - 1;
   els.lastBtn.disabled = !hasHistory || state.activePly >= state.history.length - 1;
-  els.analyzeBtn.disabled = state.analyzing;
+  els.analyzeBtn.disabled = state.analyzing || state.inputFormat === "empty";
   els.parseBtn.disabled = state.analyzing;
   els.stopBtn.hidden = !state.analyzing;
   els.analysisProgress.textContent = state.analyzing
@@ -809,11 +854,12 @@ function updateControls() {
         : `Searching depth ${state.engineDepth || 1} of ${state.analysisDepth}`
     : state.engineDepth ? `Completed at depth ${state.engineDepth}` : "Ready";
   els.positionLabel.textContent = state.activePly === 0
-    ? state.inputFormat === "fen" ? "FEN position" : "Start position"
+    ? state.inputFormat === "empty" ? "Empty board" : state.inputFormat.startsWith("fen") ? "FEN position" : "Start position"
     : `After ${state.history[state.activePly].san}`;
 }
 
 async function analyzeCurrentPosition(options = {}) {
+  if (state.inputFormat === "empty") return;
   if (!options.automatic && automaticAnalysisTimer !== null) {
     clearTimeout(automaticAnalysisTimer);
     automaticAnalysisTimer = null;
@@ -884,6 +930,7 @@ async function analyzeCurrentPosition(options = {}) {
 }
 
 function scheduleAutomaticAnalysis(options = {}) {
+  if (state.inputFormat === "empty") return;
   const analysisAlreadyQueued = automaticAnalysisTimer !== null;
   if (analysisAlreadyQueued) clearTimeout(automaticAnalysisTimer);
 

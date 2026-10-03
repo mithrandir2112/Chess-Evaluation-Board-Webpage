@@ -8,6 +8,7 @@ async function center(locator) {
 }
 async function start(page, style) {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Load sample PGN' }).click();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.getByRole('combobox', { name: 'Piece style', exact: true }).selectOption(style);
   await pauseAnalysis(page);
